@@ -1,0 +1,19 @@
+.profiles-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(360px,1fr));gap:16px}
+.profile-card{position:relative;background:#fff;border:1px solid var(--line);border-left:5px solid var(--accent,#8296ae);border-radius:10px;padding:20px 20px 18px;min-width:0}
+.profile-card h2{font-size:16px;margin:0 0 6px;padding-right:40px}
+.profile-number{position:absolute;top:14px;right:14px;width:28px;height:28px;border-radius:50%;display:grid;place-items:center;background:var(--accent,#8296ae);color:#fff;font-weight:700;font-size:13px}
+.profile-card.p1{--accent:#b5444b}.profile-card.p2{--accent:#2f6fa8}.profile-card.p3{--accent:#2c8050}.profile-card.p4{--accent:#b47424}.profile-card.p5{--accent:#575667}.profile-card.settings{--accent:#8296ae}
+.profile-card .field{margin:10px 0}.profile-card .policy-lines{margin:10px 0}.policy-line{flex-wrap:wrap}
+.crypto-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin:12px 0;font-size:11px}
+.crypto-grid label{display:grid;gap:4px}.crypto-grid select,.crypto-grid input{height:32px;font-size:11px}
+.table.matrix th{text-align:center;font-size:11px}.table.matrix td{text-align:center;font-weight:600;font-size:11px;cursor:pointer;padding:8px}
+.table.matrix tbody th{text-align:left;background:#f9fbfc;font-size:12px;padding:8px 12px}
+.o-clear{background:#f2f4f6;color:#4a5b68}.o-auth{background:#e3eef9;color:#1f4f7d}.o-enc{background:#fde8e9;color:#8d2e36}.o-block{background:#3b3b46;color:#fff}.o-unknown{background:#fff5e1;color:#7f591d}.o-self{background:#fafafa}
+td.o-clear,td.o-auth,td.o-enc,td.o-block,td.o-unknown{text-align:center;font-weight:600}
+.legend{display:flex;gap:8px;flex-wrap:wrap;padding:12px 15px;border-top:1px solid var(--line)}.legend span{padding:5px 9px;border-radius:5px;font-size:11px}
+.script{font:11px Consolas,monospace;background:#f6f8fa;border:1px solid var(--line);border-radius:6px;padding:12px;max-height:380px;overflow:auto;white-space:pre}
+.deploy-actions{display:grid;gap:8px;margin:14px 0}
+tr.mismatch td{background:#fff3f4}
+.notice.tiny{padding:6px 8px;margin-top:6px}
+@media(max-width:850px){.profiles-grid{grid-template-columns:1fr}}
+.lang-switch{margin-left:auto;display:inline-flex;gap:4px}.lang-switch button{border:1px solid #c4d0da;background:#fff;border-radius:5px;padding:3px 8px;font-size:10px;font-weight:700;color:#536e82}.lang-switch button.active{background:var(--nav);color:#fff;border-color:var(--nav)}
