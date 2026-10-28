@@ -68,8 +68,8 @@ public class DeploymentTests : IDisposable {
     [Fact]
     public async Task Probe_compares_observed_with_simulated_outcomes() {
         runner.Reply = _ => (true, JsonSerializer.Serialize(new[] {
-            new { initiator = "app1", initiatorId = f.App1.Id, responder = "db1", responderId = f.Db1.Id, tcp = true, cipher = "AES256", integrity = "SHA256", auth = "Kerberos", error = (string?)null },
-            new { initiator = "client-no", initiatorId = f.ClientNo.Id, responder = "db1", responderId = f.Db1.Id, tcp = true, cipher = "None", integrity = "SHA256", auth = "Kerberos", error = (string?)null },
+            new { initiator = "app1", initiatorId = f.App1.Id, responder = "db1", responderId = f.Db1.Id, tcp = true, cipher = (string?)"AES256", integrity = (string?)"SHA256", auth = (string?)"Kerberos", error = (string?)null },
+            new { initiator = "client-no", initiatorId = f.ClientNo.Id, responder = "db1", responderId = f.Db1.Id, tcp = true, cipher = (string?)"None", integrity = (string?)"SHA256", auth = (string?)"Kerberos", error = (string?)null },
             new { initiator = "fs1", initiatorId = f.Fs1.Id, responder = "ext1", responderId = f.Ext1.Id, tcp = false, cipher = (string?)null, integrity = (string?)null, auth = (string?)null, error = (string?)null } }));
         var r = await deployment.Probe(new(saved.Id, 1, "probe"), "op");
         Assert.Equal(["encrypted", "blocked", "blocked"], r.Select(x => x.Expected));
@@ -88,7 +88,7 @@ public class DeploymentTests : IDisposable {
         var w2 = new Wave { Id = LabFixture.Id(), Name = "Resto", Members = [new() { GroupId = f.SqlClients.Id, ComputerIds = [f.ClientNo.Id] }] };
         var plan = f.Plan with { Waves = [w1, w2] };
         var p = await repo.Save(null, plan, snapshot, PlanRules.Assess(plan, snapshot), "t");
-        var probeOk = JsonSerializer.Serialize(new[] { new { initiator = "app1", initiatorId = f.App1.Id, responder = "db1", responderId = f.Db1.Id, tcp = true, cipher = "AES256", integrity = "SHA256", auth = "Kerberos", error = (string?)null } });
+        var probeOk = JsonSerializer.Serialize(new[] { new { initiator = "app1", initiatorId = f.App1.Id, responder = "db1", responderId = f.Db1.Id, tcp = true, cipher = (string?)"AES256", integrity = (string?)"SHA256", auth = (string?)"Kerberos", error = (string?)null } });
         var verifyOk = JsonSerializer.Serialize(new[] { new { host = "app1.lab.ipsec.test", reachable = true, output = "{\"healthy\":true,\"studioRules\":[]}" } });
         runner.Reply = s => s.Contains("Add-ADGroupMember") ? (true, "{\"added\":1}") : s.Contains("gpupdate") ? (true, verifyOk) : s.Contains("Get-NetIPsecRule -PolicyStore ActiveStore") ? (true, verifyOk) : (true, probeOk);
         var r = await deployment.ApplyWave(new(p.Id, 1, w1.Id, "wave-apply", "Piloto aprovado"), "op");
@@ -123,7 +123,7 @@ public class DeploymentTests : IDisposable {
         Assert.False(r1.ExpansionAllowed);
         await Assert.ThrowsAsync<ConflictException>(() => deployment.ApplyWave(new(p.Id, 1, w2.Id, "wave-apply", "ok"), "op"));
         await deployment.ApplyWave(new(p.Id, 1, w1.Id, "wave-rollback", ""), "op");
-        var ok = JsonSerializer.Serialize(new[] { new { initiator = "client-no", initiatorId = f.ClientNo.Id, responder = "fs1", responderId = f.Fs1.Id, tcp = true, cipher = "None", integrity = "SHA256", auth = "Kerberos", error = (string?)null } });
+        var ok = JsonSerializer.Serialize(new[] { new { initiator = "client-no", initiatorId = f.ClientNo.Id, responder = "fs1", responderId = f.Fs1.Id, tcp = true, cipher = (string?)"None", integrity = (string?)"SHA256", auth = (string?)"Kerberos", error = (string?)null } });
         runner.Reply = s => s.Contains("ADGroupMember") ? (true, "{}") : (s.Contains("gpupdate") || s.Contains("ActiveStore")) ? (true, verify) : (true, ok);
         // After rollback of wave A, wave B may proceed (A is no longer a failed applied wave).
         var r2 = await deployment.ApplyWave(new(p.Id, 1, w2.Id, "wave-apply", "ok"), "op");

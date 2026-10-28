@@ -17,3 +17,4 @@ tr.mismatch td{background:#fff3f4}
 .notice.tiny{padding:6px 8px;margin-top:6px}
 @media(max-width:850px){.profiles-grid{grid-template-columns:1fr}}
 .lang-switch{margin-left:auto;display:inline-flex;gap:4px}.lang-switch button{border:1px solid #c4d0da;background:#fff;border-radius:5px;padding:3px 8px;font-size:10px;font-weight:700;color:#536e82}.lang-switch button.active{background:var(--nav);color:#fff;border-color:var(--nav)}
+.profile-card.waves{--accent:#1f7a6d}.profile-card.groups{--accent:#5c6bc0}.wave-select{height:34px;font-size:12px;max-width:280px}
