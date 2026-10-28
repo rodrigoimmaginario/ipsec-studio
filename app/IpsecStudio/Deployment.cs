@@ -60,10 +60,12 @@ public sealed class Deployment(IConfiguration config, PlanRepository repository,
         var raw = JsonSerializer.Deserialize<RawProbe[]>(output, Json.Settings) ?? [];
         return raw.Select(p => {
             var expected = p.Error is not null ? "indeterminate" : Simulator.Evaluate(plan.Input, plan.Inventory, a, p.InitiatorId, p.ResponderId).Outcome;
-            var observed = p.Error is not null ? "unreachable" : !p.Tcp ? "blocked" : p.Cipher is null ? "clear" : p.Cipher == "None" ? "authenticated" : "encrypted";
+            var observed = Classify(p.Tcp, p.Cipher, p.Error);
             return new ProbeResult(p.Initiator, p.Responder, expected, observed, expected == observed, p.Error ?? $"tcp={p.Tcp} cipher={p.Cipher ?? "-"} integrity={p.Integrity ?? "-"} auth={p.Auth ?? "-"}");
         }).ToArray();
     }
+    // Observed outcome from one probe: TCP result plus the quick mode SA read on the initiator.
+    public static string Classify(bool tcp, string? cipher, string? error) => error is not null ? "unreachable" : !tcp ? "blocked" : cipher is null ? "clear" : cipher == "None" ? "authenticated" : "encrypted";
     sealed record RawProbe(string Initiator, string InitiatorId, string Responder, string ResponderId, bool Tcp, string? Cipher, string? Integrity, string? Auth, string? Error);
     static HostProfile[] TargetHosts(SavedPlan plan, string[]? ids) {
         var a = PlanRules.Assess(plan.Input, plan.Inventory);

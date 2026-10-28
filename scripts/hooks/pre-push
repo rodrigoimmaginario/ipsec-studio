@@ -1,0 +1,5 @@
+#!/bin/sh
+# Local gate: nothing reaches the remote without the full check routine passing. Installed by scripts/install-hooks.ps1.
+root="$(git rev-parse --show-toplevel)"
+if command -v pwsh >/dev/null 2>&1; then shell=pwsh; else shell=powershell.exe; fi
+exec "$shell" -NoProfile -ExecutionPolicy Bypass -File "$root/scripts/run-checks.ps1"
