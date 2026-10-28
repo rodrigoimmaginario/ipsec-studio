@@ -69,6 +69,7 @@ app.MapPost("/api/plans/{id}", async (string id, PlanInput input, DirectoryReade
 app.MapGet("/api/plans/{id}/compile", async (string id, PlanRepository repository) => { var saved = await repository.Get(id) ?? throw new ValidationException(L.T("api.planNotFound")); return Compiler.Compile(saved); });
 app.MapGet("/api/plans/{id}/compile-groups", async (string id, PlanRepository repository) => { var saved = await repository.Get(id) ?? throw new ValidationException(L.T("api.planNotFound")); return Compiler.CompileGroups(saved); });
 app.MapGet("/api/plans/{id}/compile-wave/{waveId}", async (string id, string waveId, PlanRepository repository) => { var saved = await repository.Get(id) ?? throw new ValidationException(L.T("api.planNotFound")); return Compiler.CompileWave(saved, waveId); });
+app.MapGet("/api/plans/{id}/drift", async (string id, PlanRepository repository, Deployment deployment) => { var saved = await repository.Get(id) ?? throw new ValidationException(L.T("api.planNotFound")); return await deployment.Drift(saved.Id, saved.Version); });
 app.MapPost("/api/wave", async (WaveRequest request, Deployment deployment) => await deployment.ApplyWave(request, identity));
 app.MapGet("/api/plans/{id}/deployments", async (string id, PlanRepository repository) => await repository.ListDeployments(id));
 app.MapPost("/api/deploy", async (DeployRequest request, Deployment deployment) => await deployment.Execute(request, identity));

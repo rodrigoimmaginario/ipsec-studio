@@ -4,7 +4,10 @@ using System.Text.Json;
 
 namespace IpsecStudio;
 
-public sealed record DeployRequest(string PlanId, int Version, string Hash, string Action, string? Approval = null);
+public sealed record DeployRequest(string PlanId, int Version, string Hash, string Action, string? Approval = null) {
+    // Drift (edited Studio GPOs or external IPsec GPOs) blocks apply/rollback unless the operator acknowledges it explicitly.
+    public bool AcknowledgeDrift { get; init; }
+}
 public sealed record HostRequest(string PlanId, int Version, string Action, string[]? ComputerIds = null);
 public sealed record WaveRequest(string PlanId, int Version, string WaveId, string Action, string? Approval = null);
 public sealed record DeploymentRecord(DateTimeOffset Utc, string Identity, string PlanId, int Version, string Hash, string Action, bool Succeeded, string Output) {
@@ -39,12 +42,41 @@ public sealed class Deployment(IConfiguration config, PlanRepository repository,
             else { var c = Compiler.Compile(plan); script = request.Action == "apply" ? c.ApplyScript : c.RollbackScript; hash = c.Sha256; }
             if (!CryptographicOperations.FixedTimeEquals(Encoding.ASCII.GetBytes(hash), Encoding.ASCII.GetBytes(request.Hash ?? "")))
                 throw new ConflictException(L.T("deploy.hash"));
+            if (request.Action is "apply" or "rollback") {
+                var drift = await ReadDrift(plan, request.Action == "apply");
+                if (!drift.Clean) {
+                    if (!request.AcknowledgeDrift) throw new ConflictException(L.T("drift.blocked", Describe(drift)));
+                    await repository.AppendDeployment(new(DateTimeOffset.UtcNow, identity, plan.Id, plan.Version, hash, "drift-acknowledged", true, JsonSerializer.Serialize(drift, Json.Settings)) { Approval = request.Approval?.Trim() });
+                }
+            }
             var (ok, output) = await runner.Run(script, TimeSpan.FromMinutes(10));
             var record = new DeploymentRecord(DateTimeOffset.UtcNow, identity, plan.Id, plan.Version, hash, request.Action, ok, output) { Approval = request.Approval?.Trim() };
             await repository.AppendDeployment(record);
             return record;
         } finally { gate.Release(); }
     }
+    public async Task<DriftReport> Drift(string planId, int version) {
+        if (!Enabled) throw new UnauthorizedAccessException(L.T("deploy.disabled"));
+        var plan = await repository.Get(planId) ?? throw new ValidationException(L.T("deploy.planNotFound"));
+        if (plan.Version != version) throw new ConflictException(L.T("deploy.stale"));
+        return await ReadDrift(plan, false);
+    }
+    // Before apply the Studio GPOs are expected to be absent: only external IPsec GPOs count. Before rollback/verify, every GPO must match.
+    async Task<DriftReport> ReadDrift(SavedPlan plan, bool beforeApply) {
+        var c = Compiler.Compile(plan);
+        var spec = new { domain = plan.Inventory.Domain, target = plan.Input.Settings.LinkTarget == "domain" ? plan.Inventory.DomainDn : plan.Input.Settings.LinkTarget, gpos = c.Gpos.Select(g => g.Name) };
+        var (ok, output) = await runner.Run(DriftScript.Replace("__DRIFT__", JsonSerializer.Serialize(spec)), TimeSpan.FromMinutes(5));
+        if (!ok) throw new InvalidOperationException(L.T("deploy.remoteFailed", output));
+        var reading = IpsecStudio.Drift.Parse(output);
+        var report = IpsecStudio.Drift.Compare(c, reading);
+        // Before apply, Studio GPOs must be absent (present ones are drift); before rollback, absent ones are simply nothing to remove.
+        var relevant = beforeApply ? report.Gpos.Where(g => g.Exists).Select(g => g with { Differences = g.Differences.Length == 0 ? [L.T("drift.present")] : g.Differences }).ToArray()
+                                   : report.Gpos.Where(g => g.Exists).ToArray();
+        var absent = report.Gpos.Where(g => !g.Exists).Select(g => g with { Differences = beforeApply ? [] : g.Differences }).ToArray();
+        var dirty = relevant.Any(g => g.Differences.Length > 0) || reading.External.Length > 0 || (!beforeApply && false);
+        return report with { Gpos = [.. relevant, .. absent], Clean = !dirty };
+    }
+    static string Describe(DriftReport r) => string.Join(" | ", r.Gpos.Where(g => g.Differences.Length > 0).Select(g => g.Name + ": " + string.Join("; ", g.Differences)).Concat(r.External.Select(e => L.T("drift.external", e.Name, e.RuleCount))));
     // A wave adds (or removes) members of profile groups, then refreshes, verifies and probes only the wave's hosts.
     // Expansion to the next wave is allowed only when the script, the verification and the probe all succeeded.
     public async Task<WaveResult> ApplyWave(WaveRequest request, string identity) {
@@ -156,6 +188,39 @@ public sealed class Deployment(IConfiguration config, PlanRepository repository,
         foreach (var h in result) if (!System.Text.RegularExpressions.Regex.IsMatch(h.Name, @"\A[A-Za-z0-9-]{1,63}\z")) throw new ValidationException(L.T("deploy.badHostName", h.Name));
         return result;
     }
+    // Reads Studio GPOs and any other GPO with connection security rules. Group names come from GPO permissions (display only).
+    const string DriftScript = """
+$ErrorActionPreference='Stop'
+$ProgressPreference='SilentlyContinue'
+[Console]::OutputEncoding=[Text.UTF8Encoding]::new($false)
+$spec=ConvertFrom-Json @'
+__DRIFT__
+'@
+Import-Module GroupPolicy; Import-Module ActiveDirectory
+$domain=Get-ADDomain
+if($domain.DNSRoot -ne $spec.domain){throw "Wrong domain: $($domain.DNSRoot)"}
+$apply=[guid]'edacfd8f-ffb3-11d1-b41d-00a0c968f939'
+$links=@{}
+foreach($l in (Get-GPInheritance -Target $spec.target).GpoLinks){ $links[$l.DisplayName]=[bool]$l.Enabled }
+$gpos=@()
+foreach($name in @($spec.gpos)){
+  $g=Get-GPO -Name $name -ErrorAction SilentlyContinue
+  if(-not $g){ $gpos+=@{name=$name;exists=$false;marker=$null;version=0;linked=$false;rules=@();authorizationSddl='';exemptions='';applyGroups=@();denySids=@()}; continue }
+  $store=$spec.domain+''+$name
+  $rules=@(Get-NetIPsecRule -PolicyStore $store -ErrorAction SilentlyContinue | ForEach-Object { $af=$_|Get-NetFirewallAddressFilter; @{name=$_.IPsecRuleName;inbound=$_.InboundSecurity.ToString();outbound=$_.OutboundSecurity.ToString();requireAuthorization=[bool]$_.RequireAuthorization;remoteAddress=(@($af.RemoteAddress) -join ',')} })
+  $setting=Get-NetFirewallSetting -PolicyStore $store -ErrorAction SilentlyContinue
+  $perm=@(Get-GPPermission -Guid $g.Id -All | Where-Object { $_.Permission -eq 'GpoApply' } | ForEach-Object { $_.Trustee.Name })
+  $acl=Get-Acl -Path ('AD:'+$g.Path)
+  $deny=@($acl.Access | Where-Object { $_.AccessControlType -eq 'Deny' -and $_.ObjectType -eq $apply } | ForEach-Object { $_.IdentityReference.Translate([Security.Principal.SecurityIdentifier]).Value })
+  $gpos+=@{name=$name;exists=$true;marker=$g.Description;version=[int]$g.Computer.DSVersion;linked=[bool]$links[$name];rules=$rules;authorizationSddl=[string]$setting.RemoteMachineTransportAuthorizationList;exemptions=[string]$setting.Exemptions;applyGroups=$perm;denySids=$deny}
+}
+$external=@()
+foreach($g in (Get-GPO -All | Where-Object { $_.DisplayName -notin @($spec.gpos) })){
+  $n=@(Get-NetIPsecRule -PolicyStore ($spec.domain+''+$g.DisplayName) -ErrorAction SilentlyContinue).Count
+  if($n -gt 0){ $report=[xml](Get-GPOReport -Guid $g.Id -ReportType Xml); $external+=@{name=$g.DisplayName;ruleCount=$n;links=@($report.GPO.LinksTo | ForEach-Object { $_.SOMPath })} }
+}
+@{gpos=$gpos;external=$external} | ConvertTo-Json -Compress -Depth 6
+""";
     const string RemotePreamble = """
 $ErrorActionPreference='Stop'
 [Console]::OutputEncoding=[Text.UTF8Encoding]::new($false)

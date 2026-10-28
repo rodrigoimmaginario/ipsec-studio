@@ -34,10 +34,10 @@ public class DeploymentTests : IDisposable {
         Assert.Empty(runner.Scripts);
         var r = await deployment.Execute(new(saved.Id, 1, c.Sha256, "apply", "Aprovado pelo operador"), "LAB\\op");
         Assert.True(r.Succeeded); Assert.Equal("Aprovado pelo operador", r.Approval); Assert.Equal("LAB\\op", r.Identity);
-        Assert.Single(runner.Scripts); Assert.Contains("New-GPO", runner.Scripts[0]);
+        Assert.Equal(2, runner.Scripts.Count); Assert.Contains("external=$external", runner.Scripts[0]); Assert.Contains("New-GPO", runner.Scripts[1]);
         var log = await repo.ListDeployments(saved.Id);
         Assert.Single(log); Assert.Equal(c.Sha256, log[0].Hash);
-        runner.Reply = _ => (false, "boom");
+        runner.Reply = s => s.Contains("external=$external") ? (true, "{}") : (false, "boom");
         var failed = await deployment.Execute(new(saved.Id, 1, c.Sha256, "rollback", ""), "op");
         Assert.False(failed.Succeeded); Assert.Equal("boom", failed.Output);
     }
