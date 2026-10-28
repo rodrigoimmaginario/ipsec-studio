@@ -14,5 +14,6 @@
     <PackageReference Include="xunit.runner.visualstudio" Version="3.*" />
     <PackageReference Include="coverlet.collector" Version="6.*" />
   </ItemGroup>
+  <ItemGroup><Content Include="../scenarios/*.json" Link="scenarios/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" /></ItemGroup>
   <ItemGroup><ProjectReference Include="../../app/IpsecStudio/IpsecStudio.csproj" /></ItemGroup>
 </Project>

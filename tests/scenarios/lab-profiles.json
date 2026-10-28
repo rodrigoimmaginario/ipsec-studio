@@ -1,0 +1,44 @@
+{
+  "scenarios": [
+    {
+      "name": "baseline",
+      "membership": { "IPSEC-Exclusion": [], "IPSEC-Boundary": [] },
+      "exemptions": [],
+      "expect": [
+        ["app1", "db1", "encrypted"], ["admin1", "db1", "encrypted"], ["app1", "fs1", "authenticated"],
+        ["client-no", "db1", "blocked"], ["client-no", "fs1", "blocked"], ["client-no", "app1", "authenticated"],
+        ["db1", "fs1", "blocked"], ["db1", "client-no", "encrypted"], ["db1", "ext1", "blocked"],
+        ["app1", "ext1", "clear"], ["ext1", "app1", "blocked"], ["ext1", "db1", "blocked"], ["ext1", "client-no", "blocked"], ["ext1", "dc1", "clear"]
+      ]
+    },
+    {
+      "name": "quarantine",
+      "membership": { "IPSEC-Exclusion": ["client-no"], "IPSEC-Boundary": [] },
+      "exemptions": [],
+      "expect": [
+        ["client-no", "app1", "blocked"], ["client-no", "db1", "blocked"], ["client-no", "fs1", "blocked"], ["client-no", "ext1", "blocked"],
+        ["app1", "client-no", "blocked"], ["db1", "client-no", "blocked"], ["ext1", "client-no", "blocked"],
+        ["client-no", "admin1", "authenticated"], ["admin1", "client-no", "authenticated"], ["client-no", "dc1", "clear"],
+        ["app1", "db1", "encrypted"]
+      ]
+    },
+    {
+      "name": "boundary",
+      "membership": { "IPSEC-Exclusion": [], "IPSEC-Boundary": ["client-no"] },
+      "exemptions": [],
+      "expect": [
+        ["ext1", "client-no", "clear"], ["client-no", "ext1", "clear"], ["app1", "client-no", "authenticated"], ["client-no", "app1", "authenticated"],
+        ["client-no", "db1", "blocked"], ["db1", "client-no", "encrypted"], ["ext1", "app1", "blocked"]
+      ]
+    },
+    {
+      "name": "exempt-external",
+      "membership": { "IPSEC-Exclusion": [], "IPSEC-Boundary": [] },
+      "exemptions": ["10.74.1.60"],
+      "expect": [
+        ["ext1", "db1", "clear"], ["ext1", "fs1", "clear"], ["ext1", "app1", "clear"], ["ext1", "admin1", "clear"], ["ext1", "client-no", "clear"],
+        ["db1", "ext1", "clear"], ["fs1", "ext1", "clear"], ["app1", "db1", "encrypted"], ["client-no", "db1", "blocked"]
+      ]
+    }
+  ]
+}
