@@ -1,46 +1,98 @@
-using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 
 namespace IpsecStudio;
 
-public sealed record DeployRequest(string PlanId, int Version, string Hash, string Action);
+public sealed record DeployRequest(string PlanId, int Version, string Hash, string Action, string? Approval = null);
 public sealed record HostRequest(string PlanId, int Version, string Action, string[]? ComputerIds = null);
-public sealed record DeploymentRecord(DateTimeOffset Utc, string Identity, string PlanId, int Version, string Hash, string Action, bool Succeeded, string Output);
+public sealed record WaveRequest(string PlanId, int Version, string WaveId, string Action, string? Approval = null);
+public sealed record DeploymentRecord(DateTimeOffset Utc, string Identity, string PlanId, int Version, string Hash, string Action, bool Succeeded, string Output) {
+    public string? Approval { get; init; }
+    public string? WaveId { get; init; }
+    public bool? ExpansionAllowed { get; init; }
+}
+public sealed record WaveResult(string WaveId, string WaveName, bool Succeeded, bool ExpansionAllowed, string Output, HostResult[] Verify, ProbeResult[] Probe);
 public sealed record HostResult(string Host, bool Reachable, string Output);
 public sealed record ProbeResult(string Initiator, string Responder, string Expected, string Observed, bool Match, string Detail);
 
 // Executes compiled scripts under the identity of the user running IPsec Studio (like GPMC). No service account, no stored secrets.
-public sealed class Deployment(IConfiguration config, PlanRepository repository, ILogger<Deployment> logger) {
+public sealed class Deployment(IConfiguration config, PlanRepository repository, IScriptRunner runner, ILogger<Deployment> logger) {
     private readonly SemaphoreSlim gate = new(1, 1);
     public bool Enabled => config.GetValue("Deployment:Enabled", false);
     public int ProbePort => Math.Clamp(config.GetValue("Deployment:ProbePort", 5985), 1, 65535);
     public async Task<DeploymentRecord> Execute(DeployRequest request, string identity) {
         if (!Enabled) throw new UnauthorizedAccessException(L.T("deploy.disabled"));
-        if (request.Action is not ("apply" or "rollback")) throw new ValidationException(L.T("deploy.action"));
+        if (request.Action is not ("apply" or "rollback" or "groups")) throw new ValidationException(L.T("deploy.action"));
+        if (request.Action is "apply" or "groups" && string.IsNullOrWhiteSpace(request.Approval)) throw new ValidationException(L.T("deploy.approval"));
         await gate.WaitAsync();
         try {
             var plan = await repository.Get(request.PlanId) ?? throw new ValidationException(L.T("deploy.planNotFound"));
             if (plan.Version != request.Version) throw new ConflictException(L.T("deploy.stale"));
-            var compilation = Compiler.Compile(plan);
-            if (!CryptographicOperations.FixedTimeEquals(Encoding.ASCII.GetBytes(compilation.Sha256), Encoding.ASCII.GetBytes(request.Hash ?? "")))
+            string script, hash;
+            if (request.Action == "groups") { var g = Compiler.CompileGroups(plan); script = g.ApplyScript; hash = g.Sha256; }
+            else { var c = Compiler.Compile(plan); script = request.Action == "apply" ? c.ApplyScript : c.RollbackScript; hash = c.Sha256; }
+            if (!CryptographicOperations.FixedTimeEquals(Encoding.ASCII.GetBytes(hash), Encoding.ASCII.GetBytes(request.Hash ?? "")))
                 throw new ConflictException(L.T("deploy.hash"));
-            var (ok, output) = await RunPowerShell(request.Action == "apply" ? compilation.ApplyScript : compilation.RollbackScript, TimeSpan.FromMinutes(10));
-            var record = new DeploymentRecord(DateTimeOffset.UtcNow, identity, plan.Id, plan.Version, compilation.Sha256, request.Action, ok, output);
+            var (ok, output) = await runner.Run(script, TimeSpan.FromMinutes(10));
+            var record = new DeploymentRecord(DateTimeOffset.UtcNow, identity, plan.Id, plan.Version, hash, request.Action, ok, output) { Approval = request.Approval?.Trim() };
             await repository.AppendDeployment(record);
             return record;
         } finally { gate.Release(); }
+    }
+    // A wave adds (or removes) members of profile groups, then refreshes, verifies and probes only the wave's hosts.
+    // Expansion to the next wave is allowed only when the script, the verification and the probe all succeeded.
+    public async Task<WaveResult> ApplyWave(WaveRequest request, string identity) {
+        if (!Enabled) throw new UnauthorizedAccessException(L.T("deploy.disabled"));
+        if (request.Action is not ("wave-apply" or "wave-rollback")) throw new ValidationException(L.T("deploy.action"));
+        if (request.Action == "wave-apply" && string.IsNullOrWhiteSpace(request.Approval)) throw new ValidationException(L.T("deploy.approval"));
+        await gate.WaitAsync();
+        try {
+            var plan = await repository.Get(request.PlanId) ?? throw new ValidationException(L.T("deploy.planNotFound"));
+            if (plan.Version != request.Version) throw new ConflictException(L.T("deploy.stale"));
+            var index = Array.FindIndex(plan.Input.Waves, w => w.Id == request.WaveId);
+            if (index < 0) throw new ValidationException(L.T("waves.notFound"));
+            var log = await repository.ListDeployments(plan.Id);
+            if (request.Action == "wave-apply")
+                foreach (var earlier in plan.Input.Waves.Take(index)) {
+                    var last = log.Where(r => r.WaveId == earlier.Id).LastOrDefault();
+                    if (last is { Action: "wave-apply", ExpansionAllowed: false }) throw new ConflictException(L.T("waves.blocked", earlier.Name));
+                }
+            var wave = Compiler.CompileWave(plan, request.WaveId);
+            var apply = request.Action == "wave-apply";
+            var (ok, output) = await runner.Run(apply ? wave.ApplyScript : wave.RollbackScript, TimeSpan.FromMinutes(5));
+            HostResult[] verify = []; ProbeResult[] probe = []; var expansion = ok;
+            if (ok) {
+                var membership = PlanRules.AfterWaves(plan.Input, plan.Inventory, apply ? index + 1 : index);
+                await RunHosts(plan, wave.ComputerIds, "refresh", identity);
+                verify = await RunHosts(plan, wave.ComputerIds, "verify", identity);
+                probe = await RunProbe(plan, membership, wave.ComputerIds, identity);
+                expansion = verify.All(h => h.Reachable && IsHealthy(h.Output)) && probe.All(p => p.Match);
+            }
+            await repository.AppendDeployment(new(DateTimeOffset.UtcNow, identity, plan.Id, plan.Version, wave.Sha256, request.Action, ok, output) { Approval = request.Approval?.Trim(), WaveId = wave.WaveId, ExpansionAllowed = apply ? expansion : null });
+            return new(wave.WaveId, wave.Name, ok, apply && expansion, output, verify, probe);
+        } finally { gate.Release(); }
+    }
+    static bool IsHealthy(string output) { try { using var doc = JsonDocument.Parse(output); return doc.RootElement.TryGetProperty("healthy", out var h) && h.GetBoolean(); } catch { return false; } }
+    // Membership as the AD should look now: inventory plus every wave whose last record is a successful apply.
+    async Task<InventorySnapshot> AppliedMembership(SavedPlan plan) {
+        var log = await repository.ListDeployments(plan.Id);
+        var count = 0;
+        foreach (var w in plan.Input.Waves) { var last = log.Where(r => r.WaveId == w.Id).LastOrDefault(); if (last is { Action: "wave-apply", Succeeded: true }) count++; else break; }
+        return PlanRules.AfterWaves(plan.Input, plan.Inventory, count);
     }
     public async Task<HostResult[]> HostOperation(HostRequest request, string identity) {
         if (!Enabled) throw new UnauthorizedAccessException(L.T("deploy.remoteDisabled"));
         if (request.Action is not ("refresh" or "verify")) throw new ValidationException(L.T("deploy.action"));
         var plan = await repository.Get(request.PlanId) ?? throw new ValidationException(L.T("deploy.planNotFound"));
         if (plan.Version != request.Version) throw new ConflictException(L.T("deploy.stale"));
-        var hosts = TargetHosts(plan, request.ComputerIds);
-        var script = (request.Action == "refresh" ? RefreshScript : VerifyScript).Replace("__HOSTS__", JsonSerializer.Serialize(hosts.Select(h => h.Name + "." + plan.Inventory.Domain)));
-        var (ok, output) = await RunPowerShell(script, TimeSpan.FromMinutes(6));
-        await repository.AppendDeployment(new(DateTimeOffset.UtcNow, identity, plan.Id, plan.Version, "", request.Action, ok, output));
+        return await RunHosts(plan, request.ComputerIds, request.Action, identity);
+    }
+    async Task<HostResult[]> RunHosts(SavedPlan plan, string[]? computerIds, string action, string identity) {
+        var hosts = TargetHosts(plan, computerIds);
+        var script = (action == "refresh" ? RefreshScript : VerifyScript).Replace("__HOSTS__", JsonSerializer.Serialize(hosts.Select(h => h.Name + "." + plan.Inventory.Domain)));
+        var (ok, output) = await runner.Run(script, TimeSpan.FromMinutes(6));
+        await repository.AppendDeployment(new(DateTimeOffset.UtcNow, identity, plan.Id, plan.Version, "", action, ok, output));
         if (!ok) throw new InvalidOperationException(L.T("deploy.remoteFailed", output));
         return JsonSerializer.Deserialize<HostResult[]>(output, Json.Settings) ?? [];
     }
@@ -48,18 +100,21 @@ public sealed class Deployment(IConfiguration config, PlanRepository repository,
         if (!Enabled) throw new UnauthorizedAccessException(L.T("deploy.probeDisabled"));
         var plan = await repository.Get(request.PlanId) ?? throw new ValidationException(L.T("deploy.planNotFound"));
         if (plan.Version != request.Version) throw new ConflictException(L.T("deploy.stale"));
-        var a = PlanRules.Assess(plan.Input, plan.Inventory);
-        var initiators = TargetHosts(plan, request.ComputerIds);
+        return await RunProbe(plan, await AppliedMembership(plan), request.ComputerIds, identity);
+    }
+    async Task<ProbeResult[]> RunProbe(SavedPlan plan, InventorySnapshot membership, string[]? computerIds, string identity) {
+        var a = PlanRules.Assess(plan.Input, membership);
+        var initiators = TargetHosts(plan, computerIds);
         var responders = a.Hosts.Where(h => h.Profile != "dc" && h.Ip is not null).Select(h => new { h.ComputerId, h.Name, Ip = h.Ip!, Port = ProbePort })
             .Concat(plan.Input.ExternalHosts.Select(x => new { ComputerId = x.Id, x.Name, Ip = x.Address, Port = ProbePort })).ToArray();
         var studioIps = System.Net.Dns.GetHostAddresses(Environment.MachineName).Where(ip => ip.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork).Select(ip => ip.ToString()).ToArray();
         var spec = new { initiators = initiators.Select(h => new { h.Name, Fqdn = h.Name + "." + plan.Inventory.Domain, h.ComputerId }), responders, studioIps };
-        var (ok, output) = await RunPowerShell(ProbeScript.Replace("__SPEC__", JsonSerializer.Serialize(spec)), TimeSpan.FromMinutes(10));
+        var (ok, output) = await runner.Run(ProbeScript.Replace("__SPEC__", JsonSerializer.Serialize(spec)), TimeSpan.FromMinutes(10));
         await repository.AppendDeployment(new(DateTimeOffset.UtcNow, identity, plan.Id, plan.Version, "", "probe", ok, output));
         if (!ok) throw new InvalidOperationException(L.T("deploy.probeFailed", output));
         var raw = JsonSerializer.Deserialize<RawProbe[]>(output, Json.Settings) ?? [];
         return raw.Select(p => {
-            var expected = p.Error is not null ? "indeterminate" : Simulator.Evaluate(plan.Input, plan.Inventory, a, p.InitiatorId, p.ResponderId).Outcome;
+            var expected = p.Error is not null ? "indeterminate" : Simulator.Evaluate(plan.Input, membership, a, p.InitiatorId, p.ResponderId).Outcome;
             var observed = Classify(p.Tcp, p.Cipher, p.Error);
             return new ProbeResult(p.Initiator, p.Responder, expected, observed, expected == observed, p.Error ?? $"tcp={p.Tcp} cipher={p.Cipher ?? "-"} integrity={p.Integrity ?? "-"} auth={p.Auth ?? "-"}");
         }).ToArray();
@@ -75,25 +130,6 @@ public sealed class Deployment(IConfiguration config, PlanRepository repository,
         if (result.Length == 0) throw new ValidationException(L.T("deploy.noHosts"));
         foreach (var h in result) if (!System.Text.RegularExpressions.Regex.IsMatch(h.Name, @"\A[A-Za-z0-9-]{1,63}\z")) throw new ValidationException(L.T("deploy.badHostName", h.Name));
         return result;
-    }
-    async Task<(bool Ok, string Output)> RunPowerShell(string script, TimeSpan timeout) {
-        var file = Path.Combine(Path.GetTempPath(), "ipsec-studio-" + Guid.NewGuid().ToString("N") + ".ps1");
-        await File.WriteAllTextAsync(file, script, new UTF8Encoding(true));
-        try {
-            var start = new ProcessStartInfo {
-                FileName = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), @"WindowsPowerShell\v1.0\powershell.exe"),
-                UseShellExecute = false, RedirectStandardOutput = true, RedirectStandardError = true, CreateNoWindow = true,
-                StandardOutputEncoding = Encoding.UTF8, StandardErrorEncoding = Encoding.UTF8
-            };
-            foreach (var arg in new[] { "-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", file }) start.ArgumentList.Add(arg);
-            using var process = Process.Start(start) ?? throw new InvalidOperationException("Cannot start PowerShell.");
-            var stdout = process.StandardOutput.ReadToEndAsync(); var stderr = process.StandardError.ReadToEndAsync();
-            using var cts = new CancellationTokenSource(timeout);
-            try { await process.WaitForExitAsync(cts.Token); } catch (OperationCanceledException) { try { process.Kill(true); } catch { } return (false, L.T("deploy.timeout")); }
-            var output = (await stdout).Trim(); var error = (await stderr).Trim();
-            if (process.ExitCode != 0) logger.LogWarning("Script failed: {Error}", error);
-            return (process.ExitCode == 0, process.ExitCode == 0 ? output : (error.Length > 0 ? error : output));
-        } finally { File.Delete(file); }
     }
     const string RemotePreamble = """
 $ErrorActionPreference='Stop'

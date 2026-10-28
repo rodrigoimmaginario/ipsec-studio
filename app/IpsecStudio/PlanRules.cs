@@ -12,6 +12,19 @@ public static partial class PlanRules {
     [GeneratedRegex(@"\A[A-Za-z0-9][A-Za-z0-9 ._-]{0,63}\z")] private static partial Regex GroupNamePattern();
     public static bool ValidSid(string? sid) => sid is not null && DomainSidPattern().IsMatch(sid);
     public static bool ValidGroupName(string name) => GroupNamePattern().IsMatch(name);
+    [GeneratedRegex(@"\A((CN|OU)=[^,=]+,)+(DC=[^,=]+,)*DC=[^,=]+\z", RegexOptions.IgnoreCase)] private static partial Regex ContainerDnPattern();
+    [GeneratedRegex(@"\A[\p{L}\p{N} ._()-]{0,200}\z")] private static partial Regex DescriptionPattern();
+    public static bool ValidContainerDn(string dn) => ContainerDnPattern().IsMatch(dn);
+    // Membership after the first 'count' waves: groups gain the wave members. Used by simulation, probes and tests.
+    public static InventorySnapshot AfterWaves(PlanInput plan, InventorySnapshot snapshot, int count) {
+        var extra = new Dictionary<string, HashSet<string>>();
+        foreach (var w in plan.Waves.Take(Math.Max(0, count))) foreach (var m in w.Members) {
+            if (!extra.TryGetValue(m.GroupId, out var set)) extra[m.GroupId] = set = [];
+            set.UnionWith(m.ComputerIds);
+        }
+        if (extra.Count == 0) return snapshot;
+        return snapshot with { Objects = snapshot.Objects.Select(o => extra.TryGetValue(o.Id, out var add) ? o with { MemberIds = o.MemberIds.Union(add).ToArray() } : o).ToArray() };
+    }
     public static bool ValidIpv4(string text) => IPAddress.TryParse(text, out var a) && a.AddressFamily == AddressFamily.InterNetwork && a.ToString() == text;
     public static bool ValidCidr(string text) {
         var parts = text.Split('/');
@@ -48,7 +61,8 @@ public static partial class PlanRules {
         if (input is null) throw new ValidationException(L.T("plan.required"));
         Text(input.Name, 120, L.T("plan.name"));
         Require(input.InventoryId == snapshot.Id, L.T("plan.inventoryMismatch"));
-        if (input.Settings is null || input.Restricted is null || input.Exemptions is null || input.ExternalHosts is null || input.Settings.Crypto is null || input.Settings.SecureSubnets is null) throw new ValidationException(L.T("plan.incomplete"));
+        if (input.Settings is null || input.Restricted is null || input.Exemptions is null || input.ExternalHosts is null || input.Settings.Crypto is null || input.Settings.SecureSubnets is null || input.NewGroups is null || input.Waves is null) throw new ValidationException(L.T("plan.incomplete"));
+        Require(input.NewGroups.Length <= 100 && input.Waves.Length <= 50, L.T("plan.limit"));
         Require(input.Restricted.Length <= 50 && input.Exemptions.Length <= 500 && input.ExternalHosts.Length <= 100 && input.Settings.SecureSubnets.Length <= 50, L.T("plan.limit"));
         Require(input.BaseMode is "secureRequest" or "request" or "require", L.T("plan.baseMode"));
         Require(DomainRootSidPattern().IsMatch(snapshot.DomainSid ?? ""), L.T("plan.domainSid"));
@@ -100,6 +114,26 @@ public static partial class PlanRules {
         foreach (var x in input.ExternalHosts) {
             if (x is null) throw new ValidationException(L.T("external.null")); Require(Guid.TryParseExact(x.Id, "D", out _) && externalIds.Add(x.Id), L.T("external.id"));
             Text(x.Name, 64, L.T("external.name")); Require(ValidIpv4(x.Address), L.T("external.address", x.Name));
+        }
+        if (input.Settings.GroupContainer is not null) Require(ValidContainerDn(input.Settings.GroupContainer), L.T("groups.container"));
+        var newGroupNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var g in input.NewGroups) {
+            if (g is null) throw new ValidationException(L.T("plan.incomplete"));
+            Require(Guid.TryParseExact(g.Id, "D", out _) && ValidGroupName(g.Name) && DescriptionPattern().IsMatch(g.Description ?? ""), L.T("groups.invalid", g.Name));
+            Require(newGroupNames.Add(g.Name) && !snapshot.Objects.Any(o => o.Kind == "group" && o.Name.Equals(g.Name, StringComparison.OrdinalIgnoreCase)), L.T("groups.exists", g.Name));
+        }
+        var profileGroupIds = new HashSet<string>(input.Restricted.Where(r => r.Included).SelectMany(r => new[] { r.ProtectedGroupId, r.AccessGroupId }).Where(x => x is not null).Select(x => x!));
+        foreach (var id in new[] { input.BaseGroupId, input.NoPolicyGroupId, input.BoundaryGroupId, input.ExclusionGroupId, input.Settings.ManagementGroupId }) if (id is not null) profileGroupIds.Add(id);
+        var waveIds = new HashSet<string>();
+        foreach (var w in input.Waves) {
+            if (w is null || w.Members is null) throw new ValidationException(L.T("plan.incomplete"));
+            Require(Guid.TryParseExact(w.Id, "D", out _) && waveIds.Add(w.Id), L.T("waves.id"));
+            Text(w.Name, 100, L.T("waves.name"));
+            foreach (var m in w.Members) {
+                Require(m is not null && profileGroupIds.Contains(m.GroupId), L.T("waves.group", w.Name));
+                Require(m!.ComputerIds is { Length: > 0 and <= 10000 } && m.ComputerIds.All(c => map.TryGetValue(c, out var o) && IsComputer(o) && o.Kind != "dc" && ValidSid(o.Sid)), L.T("waves.computer", w.Name));
+            }
+            warnings.Add(L.T("waves.pending", w.Name, w.Members.Sum(m => m.ComputerIds.Length)));
         }
         var dcAddresses = snapshot.Objects.Where(o => o.Kind == "dc" && o.Ip is not null && ValidIpv4(o.Ip)).Select(o => o.Ip!).Order(StringComparer.Ordinal).ToArray();
         if (input.Settings.ExemptDomainControllers && dcAddresses.Length == 0) warnings.Add(L.T("dc.none"));

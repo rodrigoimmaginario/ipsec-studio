@@ -71,6 +71,48 @@ public static partial class Compiler {
         var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(apply + "\n--\n" + rollback))).ToLowerInvariant();
         return new(plan.Id, plan.Version, snapshot.Id, snapshot.Domain, snapshot.DomainSid, marker, gpos.ToArray(), exempt, apply, rollback, hash);
     }
+    // Wave: membership changes only. Everything is addressed by SID; names never reach PowerShell.
+    public static WaveCompilation CompileWave(SavedPlan plan, string waveId) {
+        var a = PlanRules.Assess(plan.Input, plan.Inventory);
+        var wave = plan.Input.Waves.FirstOrDefault(w => w.Id == waveId) ?? throw new ValidationException(L.T("waves.notFound"));
+        var map = plan.Inventory.Objects.ToDictionary(o => o.Id);
+        var lines = new List<string>(); var undo = new List<string>(); var computers = new List<string>();
+        foreach (var m in wave.Members) {
+            var gsid = map[m.GroupId].Sid!;
+            foreach (var cid in m.ComputerIds) {
+                var csid = map[cid].Sid!; computers.Add(cid);
+                lines.Add($"if(-not (Get-ADGroupMember -Identity '{gsid}' | Where-Object {{ $_.SID.Value -eq '{csid}' }})){{Add-ADGroupMember -Identity '{gsid}' -Members '{csid}'; $changed++}}");
+                undo.Add($"if(Get-ADGroupMember -Identity '{gsid}' | Where-Object {{ $_.SID.Value -eq '{csid}' }}){{Remove-ADGroupMember -Identity '{gsid}' -Members '{csid}' -Confirm:$false; $changed++}}");
+            }
+        }
+        var head = MembershipPreamble.Replace("__DOMAINSID__", plan.Inventory.DomainSid).Replace("__MARKER__", $"IpsecStudio plan {plan.Id} v{plan.Version} wave {wave.Id}");
+        var apply = head + NL + string.Join(NL, lines) + NL + "@{marker=$marker;changed=$changed}|ConvertTo-Json -Compress";
+        var rollback = head + NL + string.Join(NL, undo) + NL + "@{marker=$marker;changed=$changed}|ConvertTo-Json -Compress";
+        var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(apply + "\n--\n" + rollback))).ToLowerInvariant();
+        return new(wave.Id, wave.Name, computers.Distinct().ToArray(), apply, rollback, hash);
+    }
+    // New security groups, created before they can be referenced (they need a SID in the inventory).
+    public static GroupsCompilation CompileGroups(SavedPlan plan) {
+        PlanRules.Assess(plan.Input, plan.Inventory);
+        if (plan.Input.NewGroups.Length == 0) throw new ValidationException(L.T("deploy.noGroups"));
+        var container = plan.Input.Settings.GroupContainer ?? "CN=Users," + plan.Inventory.DomainDn;
+        if (!PlanRules.ValidContainerDn(container)) throw new ValidationException(L.T("groups.container"));
+        var lines = plan.Input.NewGroups.Select(g => $"if(-not (Get-ADGroup -Filter \"Name -eq '{g.Name}'\")){{New-ADGroup -Name '{g.Name}' -GroupScope Global -GroupCategory Security -Path '{container}' -Description '{g.Description}'; $changed++}}");
+        var head = MembershipPreamble.Replace("__DOMAINSID__", plan.Inventory.DomainSid).Replace("__MARKER__", $"IpsecStudio plan {plan.Id} v{plan.Version} groups");
+        var apply = head + NL + string.Join(NL, lines) + NL + "@{marker=$marker;changed=$changed}|ConvertTo-Json -Compress";
+        var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(apply))).ToLowerInvariant();
+        return new(plan.Input.NewGroups.Select(g => g.Name).ToArray(), container, apply, hash);
+    }
+    const string MembershipPreamble = """
+$ErrorActionPreference='Stop'
+$ProgressPreference='SilentlyContinue'
+[Console]::OutputEncoding=[Text.UTF8Encoding]::new($false)
+Import-Module ActiveDirectory
+$domain=Get-ADDomain
+if($domain.DomainSID.Value -ne '__DOMAINSID__'){throw "Wrong domain: $($domain.DNSRoot)"}
+$marker='__MARKER__'
+$changed=0
+""";
     const string Preamble = """
 $ErrorActionPreference='Stop'
 $ProgressPreference='SilentlyContinue'

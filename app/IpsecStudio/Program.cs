@@ -12,9 +12,10 @@ builder.WebHost.ConfigureKestrel(options => { options.Listen(IPAddress.Loopback,
 builder.Services.ConfigureHttpJsonOptions(options => { options.SerializerOptions.UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow; });
 builder.Services.AddSingleton<DirectoryReader>();
 builder.Services.AddSingleton(new PlanRepository(builder.Configuration["Storage:Root"] ?? throw new InvalidOperationException("Storage path required.")));
+builder.Services.AddSingleton<IScriptRunner, PowerShellRunner>();
 builder.Services.AddSingleton<Deployment>();
 var app = builder.Build();
-const string Version = "0.3.0";
+const string Version = "0.4.0";
 var token = Convert.ToHexString(RandomNumberGenerator.GetBytes(32));
 var identity = WindowsIdentity.GetCurrent().Name;
 var origin = $"http://127.0.0.1:{port}";
@@ -54,15 +55,21 @@ async Task<(InventorySnapshot Snapshot, PlanAssessment Assessment)> Evaluate(Pla
     return (snapshot, assessment);
 }
 app.MapPost("/api/plans/assess", async (PlanInput input, DirectoryReader directory, PlanRepository repository) => (await Evaluate(input, directory, repository)).Assessment);
-app.MapPost("/api/plans/simulate", async (PlanInput input, DirectoryReader directory, PlanRepository repository) => {
+app.MapPost("/api/plans/simulate", async (PlanInput input, DirectoryReader directory, PlanRepository repository, HttpContext context) => {
     var (snapshot, assessment) = await Evaluate(input, directory, repository);
-    return new { assessment, matrix = Simulator.Matrix(input, snapshot, assessment) };
+    var waves = int.TryParse(context.Request.Query["wave"], out var n) ? Math.Clamp(n, 0, input.Waves?.Length ?? 0) : 0;
+    var membership = PlanRules.AfterWaves(input, snapshot, waves);
+    var waveAssessment = waves == 0 ? assessment : PlanRules.Assess(input, membership);
+    return new { assessment, wave = waves, matrix = Simulator.Matrix(input, membership, waveAssessment), waveHosts = waveAssessment.Hosts };
 });
 app.MapGet("/api/plans", async (PlanRepository repository) => (await repository.List()).Select(p => new { p.Id, p.Version, p.Name, p.UpdatedAt, domain = p.Inventory.Domain, capturedAt = p.Inventory.CapturedAt }));
 app.MapGet("/api/plans/{id}", async (string id, PlanRepository repository) => { var saved = await repository.Get(id); return saved is null ? Results.NotFound(new { error = L.T("api.planNotFound") }) : Results.Ok(saved); });
 app.MapPost("/api/plans", async (PlanInput input, DirectoryReader directory, PlanRepository repository) => { var (snapshot, assessment) = await Evaluate(input, directory, repository); var saved = await repository.Save(null, input, snapshot, assessment, identity); return Results.Created($"/api/plans/{saved.Id}", saved); });
 app.MapPost("/api/plans/{id}", async (string id, PlanInput input, DirectoryReader directory, PlanRepository repository) => { var (snapshot, assessment) = await Evaluate(input, directory, repository); return Results.Ok(await repository.Save(id, input, snapshot, assessment, identity)); });
 app.MapGet("/api/plans/{id}/compile", async (string id, PlanRepository repository) => { var saved = await repository.Get(id) ?? throw new ValidationException(L.T("api.planNotFound")); return Compiler.Compile(saved); });
+app.MapGet("/api/plans/{id}/compile-groups", async (string id, PlanRepository repository) => { var saved = await repository.Get(id) ?? throw new ValidationException(L.T("api.planNotFound")); return Compiler.CompileGroups(saved); });
+app.MapGet("/api/plans/{id}/compile-wave/{waveId}", async (string id, string waveId, PlanRepository repository) => { var saved = await repository.Get(id) ?? throw new ValidationException(L.T("api.planNotFound")); return Compiler.CompileWave(saved, waveId); });
+app.MapPost("/api/wave", async (WaveRequest request, Deployment deployment) => await deployment.ApplyWave(request, identity));
 app.MapGet("/api/plans/{id}/deployments", async (string id, PlanRepository repository) => await repository.ListDeployments(id));
 app.MapPost("/api/deploy", async (DeployRequest request, Deployment deployment) => await deployment.Execute(request, identity));
 app.MapPost("/api/hosts", async (HostRequest request, Deployment deployment) => await deployment.HostOperation(request, identity));

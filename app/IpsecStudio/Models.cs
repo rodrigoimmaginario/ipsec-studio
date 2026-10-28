@@ -50,6 +50,24 @@ public sealed record PlanSettings {
     public CryptoSettings Crypto { get; init; } = new();
     // Optional group of management hosts that keep reaching quarantined computers.
     public string? ManagementGroupId { get; init; }
+    // Container (DN) where "Prepare groups" creates new security groups. Null = CN=Users of the domain.
+    public string? GroupContainer { get; init; }
+}
+// Security group the Studio creates on request, before it can be referenced by a profile (it needs a SID).
+public sealed record NewGroup {
+    public string Id { get; init; } = "";
+    public string Name { get; init; } = "";
+    public string Description { get; init; } = "";
+}
+// A wave adds computers to profile groups. Waves are ordered; applying wave N assumes waves < N were applied.
+public sealed record WaveMember {
+    public string GroupId { get; init; } = "";
+    public string[] ComputerIds { get; init; } = [];
+}
+public sealed record Wave {
+    public string Id { get; init; } = "";
+    public string Name { get; init; } = "";
+    public WaveMember[] Members { get; init; } = [];
 }
 // Profile 1: protected servers reachable only by an access group; optional encryption; never falls back to clear.
 public sealed record RestrictedServers {
@@ -92,6 +110,8 @@ public sealed record PlanInput {
     // Profile 5: members cannot establish IPsec with any trusted computer (network exclusion group).
     public string? ExclusionGroupId { get; init; }
     public ExternalHost[] ExternalHosts { get; init; } = [];
+    public NewGroup[] NewGroups { get; init; } = [];
+    public Wave[] Waves { get; init; } = [];
 }
 
 // ---- Assessment: deterministic resolution of the plan against one inventory snapshot. ----
@@ -104,6 +124,8 @@ public sealed record Expectation(string Initiator, string Responder, string Outc
 
 // ---- Compilation: the frozen artifact that will be executed. ----
 public sealed record GpoSpec(string Name, string Profile, string ApplyGroup, string ApplyGroupSid, string[] DenyGroupSids, string Inbound, string Outbound, bool Encryption, bool RequireAuthorization, string? AuthorizationSddl, string[] ComputerIds);
+public sealed record WaveCompilation(string WaveId, string Name, string[] ComputerIds, string ApplyScript, string RollbackScript, string Sha256);
+public sealed record GroupsCompilation(string[] Names, string Container, string ApplyScript, string Sha256);
 public sealed record Compilation(string PlanId, int PlanVersion, string SnapshotId, string Domain, string DomainSid, string Marker, GpoSpec[] Gpos, string[] ExemptAddresses, string ApplyScript, string RollbackScript, string Sha256);
 
 public sealed record SavedPlan(string Id, int Version, string Name, DateTimeOffset CreatedAt, DateTimeOffset UpdatedAt, string SavedBy, PlanInput Input, InventorySnapshot Inventory, PlanAssessment Assessment) {
