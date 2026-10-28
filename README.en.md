@@ -53,17 +53,19 @@ The service listens on `127.0.0.1` only and uses the Windows identity of whoever
 - [Installation and configuration](docs/en/install.md)
 - [User guide](docs/en/usage.md)
 - [Security model and limits](docs/en/security.md)
+- [TDD guide](docs/en/tdd.md)
 
 Interface language: Portuguese (default) or English, selectable in the header; the choice is remembered.
 
 ## Development
 
 ```powershell
-scripts\run-checks.ps1          # unit + simulator tests, UI smoke, build
+scripts\run-checks.ps1          # xUnit tests + gated coverage, UI smoke, build
+scripts\install-hooks.ps1       # pre-push hook that runs run-checks
 scripts\run-checks.ps1 -Publish # same, plus publish
 ```
 
-The project follows TDD: write the test in `tests/IpsecStudio.Tests` (or in the UI smoke) before the code. Changes to the simulator or the compiler require a lab cycle with an *expected × observed* probe. See [CONTRIBUTING.md](CONTRIBUTING.md) and [CHANGELOG.md](CHANGELOG.md).
+The project follows TDD ([guide](docs/en/tdd.md)): write the test in `tests/IpsecStudio.Tests` (or in the UI smoke) before the code. CI runs only on pull requests and tags, on a Linux runner. Changes to the simulator or the compiler require a lab cycle with an *expected × observed* probe. See [CONTRIBUTING.md](CONTRIBUTING.md) and [CHANGELOG.md](CHANGELOG.md).
 
 ## Origin
 

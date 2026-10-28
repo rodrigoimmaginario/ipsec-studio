@@ -1,0 +1,45 @@
+name: checks
+# Cost controls: Linux runner only (1x minutes), pull requests and release tags only, path filter, one job,
+# cancel superseded runs, hard timeout. The primary gate is local (scripts/hooks/pre-push); this run confirms it.
+on:
+  pull_request:
+    branches: [main]
+    paths: ['app/**', 'tests/**', 'scripts/**', '.github/workflows/**']
+  push:
+    tags: ['v*']
+concurrency:
+  group: checks-${{ github.ref }}
+  cancel-in-progress: true
+permissions:
+  contents: read
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Tests, coverage gate, UI smoke, build
+        shell: pwsh
+        run: ./scripts/run-checks.ps1
+      - name: Publish win-x64 (release tags only)
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        run: |
+          dotnet publish app/IpsecStudio/IpsecStudio.csproj -c Release -r win-x64 --self-contained true -o artifacts/app --nologo -v q
+          Compress-Archive -Path artifacts/app/* -DestinationPath "artifacts/ipsec-studio-${{ github.ref_name }}-win-x64.zip"
+          (Get-FileHash "artifacts/ipsec-studio-${{ github.ref_name }}-win-x64.zip" -Algorithm SHA256).Hash.ToLower() | Set-Content "artifacts/ipsec-studio-${{ github.ref_name }}-win-x64.zip.sha256"
+      - name: Upload release package
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: actions/upload-artifact@v4
+        with:
+          name: ipsec-studio-${{ github.ref_name }}-win-x64
+          path: |
+            artifacts/*.zip
+            artifacts/*.sha256
+          retention-days: 30
