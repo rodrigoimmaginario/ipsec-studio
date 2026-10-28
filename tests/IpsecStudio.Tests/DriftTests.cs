@@ -45,6 +45,14 @@ public class DriftTests : IDisposable {
     }
 
     [Fact]
+    public void NotConfigured_authorization_list_matches_a_gpo_without_one() {
+        var c = Compiler.Compile(f.Saved());
+        var reading = Clean(c) with { Gpos = Clean(c).Gpos.Select(g => g.Name == "IpsecStudio-Boundary" ? g with { AuthorizationSddl = "NotConfigured" } : g).ToArray() };
+        Assert.Null(c.Gpos.Single(g => g.Name == "IpsecStudio-Boundary").AuthorizationSddl);
+        Assert.True(Drift.Compare(c, reading).Clean);
+    }
+
+    [Fact]
     public void External_gpos_with_ipsec_rules_make_the_report_dirty() {
         var c = Compiler.Compile(f.Saved());
         var r = Drift.Compare(c, Clean(c) with { External = [new("Corp-Legacy-IPsec", 2, ["DC=lab,DC=ipsec,DC=test"])] });

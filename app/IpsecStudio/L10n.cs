@@ -90,6 +90,7 @@ public static class L {
         ["drift.field"] = ("{0}: {1} esperado '{2}', encontrado '{3}'.", "{0}: {1} expected '{2}', found '{3}'."),
         ["drift.external"] = ("GPO externa {0} com {1} regra(s) IPsec", "External GPO {0} with {1} IPsec rule(s)"),
         ["drift.present"] = ("GPO já existe antes da aplicação; reverta ou reconheça.", "GPO already exists before apply; roll back or acknowledge."),
+        ["drift.readError"] = ("Leitura falhou: {0}", "Read failed: {0}"),
         ["drift.blocked"] = ("Drift detectado; reconheça para continuar: {0}", "Drift detected; acknowledge to continue: {0}"),
         // simulator
         ["sim.sameHost"] = ("Mesmo host.", "Same host."),

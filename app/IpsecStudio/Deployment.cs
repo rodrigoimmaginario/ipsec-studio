@@ -73,7 +73,7 @@ public sealed class Deployment(IConfiguration config, PlanRepository repository,
         var relevant = beforeApply ? report.Gpos.Where(g => g.Exists).Select(g => g with { Differences = g.Differences.Length == 0 ? [L.T("drift.present")] : g.Differences }).ToArray()
                                    : report.Gpos.Where(g => g.Exists).ToArray();
         var absent = report.Gpos.Where(g => !g.Exists).Select(g => g with { Differences = beforeApply ? [] : g.Differences }).ToArray();
-        var dirty = relevant.Any(g => g.Differences.Length > 0) || reading.External.Length > 0 || (!beforeApply && false);
+        var dirty = relevant.Any(g => g.Differences.Length > 0) || reading.External.Length > 0;
         return report with { Gpos = [.. relevant, .. absent], Clean = !dirty };
     }
     static string Describe(DriftReport r) => string.Join(" | ", r.Gpos.Where(g => g.Differences.Length > 0).Select(g => g.Name + ": " + string.Join("; ", g.Differences)).Concat(r.External.Select(e => L.T("drift.external", e.Name, e.RuleCount))));
@@ -206,17 +206,18 @@ $gpos=@()
 foreach($name in @($spec.gpos)){
   $g=Get-GPO -Name $name -ErrorAction SilentlyContinue
   if(-not $g){ $gpos+=@{name=$name;exists=$false;marker=$null;version=0;linked=$false;rules=@();authorizationSddl='';exemptions='';applyGroups=@();denySids=@()}; continue }
-  $store=$spec.domain+''+$name
-  $rules=@(Get-NetIPsecRule -PolicyStore $store -ErrorAction SilentlyContinue | ForEach-Object { $af=$_|Get-NetFirewallAddressFilter; @{name=$_.IPsecRuleName;inbound=$_.InboundSecurity.ToString();outbound=$_.OutboundSecurity.ToString();requireAuthorization=[bool]$_.RequireAuthorization;remoteAddress=(@($af.RemoteAddress) -join ',')} })
-  $setting=Get-NetFirewallSetting -PolicyStore $store -ErrorAction SilentlyContinue
+  $store=$spec.domain+'\'+$name
+  $errors=@(); $rules=@(); $setting=$null
+  try{ $rules=@(Get-NetIPsecRule -PolicyStore $store -ErrorAction Stop | ForEach-Object { $af=$_|Get-NetFirewallAddressFilter -ErrorAction Stop; @{name=$_.IPsecRuleName;inbound=$_.InboundSecurity.ToString();outbound=$_.OutboundSecurity.ToString();requireAuthorization=[bool]$_.RequireAuthorization;remoteAddress=(@($af.RemoteAddress) -join ',')} }) }catch{ $errors+="rules: $($_.Exception.Message)" }
+  try{ $setting=Get-NetFirewallSetting -PolicyStore $store -ErrorAction Stop }catch{ $errors+="setting: $($_.Exception.Message)" }
   $perm=@(Get-GPPermission -Guid $g.Id -All | Where-Object { $_.Permission -eq 'GpoApply' } | ForEach-Object { $_.Trustee.Name })
-  $acl=Get-Acl -Path ('AD:'+$g.Path)
+  $acl=Get-Acl -Path ('AD:\'+$g.Path)
   $deny=@($acl.Access | Where-Object { $_.AccessControlType -eq 'Deny' -and $_.ObjectType -eq $apply } | ForEach-Object { $_.IdentityReference.Translate([Security.Principal.SecurityIdentifier]).Value })
-  $gpos+=@{name=$name;exists=$true;marker=$g.Description;version=[int]$g.Computer.DSVersion;linked=[bool]$links[$name];rules=$rules;authorizationSddl=[string]$setting.RemoteMachineTransportAuthorizationList;exemptions=[string]$setting.Exemptions;applyGroups=$perm;denySids=$deny}
+  $gpos+=@{name=$name;exists=$true;marker=$g.Description;version=[int]$g.Computer.DSVersion;linked=[bool]$links[$name];rules=$rules;authorizationSddl=[string]$setting.RemoteMachineTransportAuthorizationList;exemptions=[string]$setting.Exemptions;applyGroups=$perm;denySids=$deny;errors=$errors}
 }
 $external=@()
 foreach($g in (Get-GPO -All | Where-Object { $_.DisplayName -notin @($spec.gpos) })){
-  $n=@(Get-NetIPsecRule -PolicyStore ($spec.domain+''+$g.DisplayName) -ErrorAction SilentlyContinue).Count
+  $n=@(Get-NetIPsecRule -PolicyStore ($spec.domain+'\'+$g.DisplayName) -ErrorAction Stop).Count
   if($n -gt 0){ $report=[xml](Get-GPOReport -Guid $g.Id -ReportType Xml); $external+=@{name=$g.DisplayName;ruleCount=$n;links=@($report.GPO.LinksTo | ForEach-Object { $_.SOMPath })} }
 }
 @{gpos=$gpos;external=$external} | ConvertTo-Json -Compress -Depth 6
