@@ -192,7 +192,7 @@ ConvertTo-Json @($results) -Compress -Depth 8
     $out=Invoke-Command -ComputerName $h -ArgumentList $lastChange -ScriptBlock {
       param($lastChangeUtc)
       $tgt=$null
-      try{ $text=(klist.exe -li 0x3e7 tgt | Out-String); if($text -match 'Start Time:\s*([^\r\n]+?)\s*\(local\)'){ $tgt=[datetime]::Parse($matches[1],[Globalization.CultureInfo]::CurrentCulture).ToUniversalTime().ToString('o') } }catch{}
+      try{ $text=(klist.exe -li 0x3e7 tgt 2>&1 | Out-String);  if($text -match 'Start\s*Time\s*:\s*([^\r\n]+?)\s*\(local\)'){ $tgt=[datetime]::Parse($matches[1],[Globalization.CultureInfo]::CurrentCulture).ToUniversalTime().ToString('o') } }catch{}
       $rules=@(Get-NetIPsecRule -PolicyStore ActiveStore -TracePolicyStore | Where-Object DisplayName -like 'IpsecStudio*' | ForEach-Object {@{name=$_.IPsecRuleName;display=$_.DisplayName;inbound=$_.InboundSecurity.ToString();outbound=$_.OutboundSecurity.ToString();requireAuthorization=[bool]$_.RequireAuthorization;source=$_.PolicyStoreSource;enabled=$_.Enabled.ToString();status=$_.PrimaryStatus.ToString();statusText=[string]$_.Status}})
       $setting=Get-NetFirewallSetting -PolicyStore ActiveStore
       $all=@(Get-NetIPsecRule -PolicyStore ActiveStore | Where-Object Enabled -eq True).Count
