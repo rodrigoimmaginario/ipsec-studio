@@ -38,3 +38,10 @@ The execution log keeps each action, identity, version and output.
 - **Quarantine a machine**: add it to the exclusion group and run *Refresh policy on hosts*. No GPO changes.
 - **Grant access to a restricted server**: add the computer to the access group; renew the machine ticket (Refresh) or wait for a reboot.
 - **New plan version**: save, roll back the applied version, compile and apply the new one.
+
+## Waves, approval and new groups (0.4)
+
+- **New groups** (02 · Profiles → New groups): declare the name and, in 04 · Deploy, use *Prepare groups in AD* (requires an approval note). Then read the inventory again to use them in profiles.
+- **Waves** (02 · Profiles → Waves): each wave lists computers per profile group, in order. In 03 · Simulate, the *After wave N* selector shows the matrix with the membership at that point.
+- **Apply wave** (04 · Deploy): writes the membership to AD with your identity, refreshes, verifies and probes only the wave's hosts. If a verification or a probe fails, the wave is marked *failed* and the next one is **blocked** until you roll back or fix it. *Roll back wave* removes the members.
+- **Approval note**: required to apply GPOs, prepare groups and apply waves; it is kept in the execution log together with the Windows identity.

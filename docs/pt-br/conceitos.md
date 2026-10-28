@@ -34,3 +34,7 @@ Observações relevantes aprendidas em laboratório:
 - A lista de autorização é avaliada **pelo lado que recebe a conexão**. Um servidor restrito pode iniciar conexões a qualquer host que o autorize.
 - SAs são **bidirecionais** e reaproveitadas; por isso a quarentena tem GPO própria e a etapa *Atualizar* limpa SAs e tickets ao mudar grupos.
 - Mudanças de grupo só valem após renovação do ticket de máquina (`klist -li 0x3e7 purge`) ou reinício; o Studio faz isso na etapa *Atualizar*.
+
+## Ondas
+
+A implantação em ondas não duplica GPOs: as GPOs são sempre uma por perfil. A onda controla **quem entra em cada grupo de perfil**, como no desenho original ("arrastar e soltar" a máquina para o grupo). O Studio grava a associação (por SID, nunca por nome), renova a identidade dos hosts da onda e compara a sonda com a simulação daquela onda antes de permitir a próxima.

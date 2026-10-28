@@ -34,3 +34,7 @@ Relevant observations from the lab:
 - The authorization list is evaluated **by the side receiving the connection**. A restricted server can initiate connections to any host that authorizes it.
 - SAs are **bidirectional** and reused; that is why quarantine has its own GPO and the *Refresh* step clears SAs and tickets after group changes.
 - Group changes take effect only after the machine ticket is renewed (`klist -li 0x3e7 purge`) or a reboot; the Studio does this in the *Refresh* step.
+
+## Waves
+
+Wave deployment does not duplicate GPOs: there is always one GPO per profile. A wave controls **who joins each profile group**, as in the original design ("drag and drop" the machine into the group). The Studio writes the membership (by SID, never by name), renews the identity of the wave's hosts and compares the probe with that wave's simulation before allowing the next one.

@@ -38,3 +38,10 @@ O registro de execuções guarda cada ação, identidade, versão e saída.
 - **Colocar uma máquina em quarentena**: adicione-a ao grupo de exclusão e execute *Atualizar política nos hosts*. Nenhuma GPO muda.
 - **Dar acesso a um servidor restrito**: adicione o computador ao grupo de acesso; renove o ticket de máquina (Atualizar) ou aguarde o reinício.
 - **Nova versão do plano**: salve, reverta a versão aplicada, compile e aplique a nova.
+
+## Ondas, aprovação e grupos novos (0.4)
+
+- **Grupos novos** (02 · Perfis → Grupos novos): declare o nome e, em 04 · Implantar, use *Preparar grupos no AD* (exige nota de aprovação). Depois releia o inventário para usá-los nos perfis.
+- **Ondas** (02 · Perfis → Ondas): cada onda lista computadores por grupo de perfil, em ordem. Em 03 · Simular, o seletor *Após a onda N* mostra a matriz com a associação daquele ponto.
+- **Aplicar onda** (04 · Implantar): grava a associação no AD com a sua identidade, atualiza, verifica e sonda só os hosts da onda. Se uma verificação ou uma sonda falhar, a onda fica marcada como *falhou* e a seguinte fica **bloqueada** até você reverter ou corrigir. *Reverter onda* retira os membros.
+- **Nota de aprovação**: obrigatória para aplicar GPOs, preparar grupos e aplicar ondas; fica no registro de execuções junto com a identidade Windows.
