@@ -53,17 +53,19 @@ O serviço escuta apenas em `127.0.0.1` e usa a identidade Windows de quem o exe
 - [Instalação e configuração](docs/pt-br/instalacao.md)
 - [Guia de uso](docs/pt-br/uso.md)
 - [Modelo de segurança e limites](docs/pt-br/seguranca.md)
+- [Guia de TDD](docs/pt-br/tdd.md)
 
 Idioma da interface: português (padrão) ou inglês, selecionável no cabeçalho; a escolha é lembrada.
 
 ## Desenvolvimento
 
 ```powershell
-scripts\run-checks.ps1          # testes de unidade + simulador, smoke da interface, build
+scripts\run-checks.ps1          # testes xUnit + cobertura com gate, smoke da interface, build
+scripts\install-hooks.ps1       # hook pre-push que executa run-checks
 scripts\run-checks.ps1 -Publish # idem, com publish
 ```
 
-O projeto segue TDD: escreva o teste em `tests/IpsecStudio.Tests` (ou no smoke de interface) antes do código. Mudanças no simulador ou no compilador exigem um ciclo em laboratório com sonda *esperado × observado*. Veja [CONTRIBUTING.md](CONTRIBUTING.md) e [CHANGELOG.md](CHANGELOG.md).
+O projeto segue TDD ([guia](docs/pt-br/tdd.md)): escreva o teste em `tests/IpsecStudio.Tests` (ou no smoke de interface) antes do código. O CI roda só em pull requests e tags, num runner Linux. Mudanças no simulador ou no compilador exigem um ciclo em laboratório com sonda *esperado × observado*. Veja [CONTRIBUTING.md](CONTRIBUTING.md) e [CHANGELOG.md](CHANGELOG.md).
 
 ## Origem
 
