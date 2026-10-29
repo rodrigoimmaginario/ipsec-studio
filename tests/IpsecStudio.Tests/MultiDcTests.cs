@@ -23,7 +23,8 @@ public class MultiDcTests {
         Assert.DoesNotContain("'AD:\\", c.ApplyScript);
         Assert.Contains("$gs=Open-NetGPO -PolicyStore $store -DomainController $pdc", c.ApplyScript);
         Assert.Contains("Save-NetGPO -GPOSession $gs", c.ApplyScript);
-        Assert.DoesNotMatch(@"(New-NetIPsecw+|Set-NetFirewallSetting) -PolicyStore $store", c.ApplyScript);
+        Assert.DoesNotMatch(@"(New-NetIPsec\w+|Set-NetFirewallSetting) -PolicyStore \$store", c.ApplyScript);
+        Assert.Matches(@"New-NetIPsecRule -GPOSession \$gs", c.ApplyScript);
     }
 
     [Fact]
