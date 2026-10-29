@@ -137,6 +137,25 @@ if($domain.DNSRoot -ne $spec.domain -or $domain.DomainSID.Value -ne $spec.domain
 __PINPDC__
 $target=if($spec.linkTarget -eq 'domain'){$domain.DistinguishedName}else{$spec.linkTarget}
 function Get-StudioGpo([string]$name){$g=Get-GPO -Name $name -ErrorAction SilentlyContinue;if($g -and $g.Description -ne $spec.marker){throw "GPO $name exists but belongs to another revision: $($g.Description)"};return $g}
+# Hosts refresh from any DC: wait (max 180 s) until every reachable DC shows the Studio GPOs present with AD = SYSVOL version
+# (after apply) or absent (after rollback). Unreachable DCs are reported, not waited for.
+function Wait-StudioReplication([bool]$Present){
+  $deadline=(Get-Date).AddSeconds(180); $state=[ordered]@{}
+  foreach($dc in @(Get-ADDomainController -Filter * | ForEach-Object { $_.HostName })){
+    if(-not (Test-NetConnection $dc -Port 389 -InformationLevel Quiet -WarningAction SilentlyContinue)){ $state[$dc]='unreachable'; continue }
+    $ok=$false
+    while(-not $ok -and (Get-Date) -lt $deadline){
+      $ok=$true
+      foreach($n in @($spec.gpos.name)){
+        $g=Get-GPO -Name $n -Server $dc -ErrorAction SilentlyContinue
+        if($Present){ if(-not ($g -and $g.Description -eq $spec.marker -and $g.Computer.DSVersion -eq $g.Computer.SysvolVersion)){ $ok=$false } } elseif($g){ $ok=$false }
+      }
+      if(-not $ok){ Start-Sleep -Seconds 5 }
+    }
+    $state[$dc]=if($ok){'ok'}else{'timeout'}
+  }
+  return $state
+}
 """;
     const string NL = "\n";
     const string ApplyTemplate = Preamble + NL + """
@@ -176,7 +195,8 @@ try{
   }
   foreach($g in $spec.gpos){New-GPLink -Name $g.name -Target $target -LinkEnabled Yes | Out-Null}
   $links=@((Get-GPInheritance -Target $target).GpoLinks | Where-Object {$_.DisplayName -in @($spec.gpos.name)} | Select-Object DisplayName,Enabled,Order)
-  @{marker=$spec.marker;target=$target;gpos=@($spec.gpos | ForEach-Object {$x=Get-GPO -Name $_.name;@{name=$_.name;guid=$x.Id.ToString();profile=$_.profile}});links=$links} | ConvertTo-Json -Compress -Depth 6
+  $replication=Wait-StudioReplication -Present $true
+  @{marker=$spec.marker;target=$target;gpos=@($spec.gpos | ForEach-Object {$x=Get-GPO -Name $_.name;@{name=$_.name;guid=$x.Id.ToString();profile=$_.profile}});links=$links;replication=$replication} | ConvertTo-Json -Compress -Depth 6
 }catch{
   foreach($name in $created){$g=Get-GPO -Name $name -ErrorAction SilentlyContinue;if($g -and $g.Description -eq $spec.marker){Remove-GPLink -Name $name -Target $target -ErrorAction SilentlyContinue | Out-Null;Remove-GPO -Name $name | Out-Null}}
   throw
@@ -192,6 +212,7 @@ foreach($g in $spec.gpos){
   $removed+=$g.name
 }
 $remaining=@((Get-GPInheritance -Target $target).GpoLinks | Where-Object {$_.DisplayName -like 'IpsecStudio-*'} | Select-Object DisplayName,Enabled)
-@{marker=$spec.marker;target=$target;removed=$removed;remainingStudioLinks=$remaining} | ConvertTo-Json -Compress -Depth 5
+$replication=Wait-StudioReplication -Present $false
+@{marker=$spec.marker;target=$target;removed=$removed;remainingStudioLinks=$remaining;replication=$replication} | ConvertTo-Json -Compress -Depth 5
 """;
 }

@@ -95,3 +95,20 @@ public class ProbeTimingTests {
         Assert.DoesNotContain("Start-Sleep -Milliseconds 300\n        $qm=", s);
     }
 }
+
+// Lab, CV4.DS5: right after rollback app1 refreshed from dc2, which still had the GPOs deleted on the PDC, and kept the policy.
+// Apply and rollback wait until every reachable DC reflects the change before the hosts are refreshed.
+public class ReplicationWaitTests {
+    readonly LabFixture f = new();
+    [Fact]
+    public void Apply_and_rollback_wait_for_every_reachable_dc() {
+        var c = Compiler.Compile(f.Saved());
+        Assert.Contains("Wait-StudioReplication -Present $true", c.ApplyScript);
+        Assert.Contains("Wait-StudioReplication -Present $false", c.RollbackScript);
+        foreach (var s in new[] { c.ApplyScript, c.RollbackScript }) {
+            Assert.Contains("Get-ADDomainController -Filter *", s);
+            Assert.Contains("$g.Computer.DSVersion -eq $g.Computer.SysvolVersion", s);
+            Assert.Contains("replication=", s);
+        }
+    }
+}
