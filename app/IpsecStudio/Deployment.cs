@@ -8,7 +8,10 @@ public sealed record DeployRequest(string PlanId, int Version, string Hash, stri
     // Drift (edited Studio GPOs or external IPsec GPOs) blocks apply/rollback unless the operator acknowledges it explicitly.
     public bool AcknowledgeDrift { get; init; }
 }
-public sealed record HostRequest(string PlanId, int Version, string Action, string[]? ComputerIds = null);
+public sealed record HostRequest(string PlanId, int Version, string Action, string[]? ComputerIds = null) {
+    // Probe only: capture packets on the responders while probing (NDIS trace), keep counts, delete the capture.
+    public bool Capture { get; init; }
+}
 public sealed record WaveRequest(string PlanId, int Version, string WaveId, string Action, string? Approval = null);
 public sealed record DeploymentRecord(DateTimeOffset Utc, string Identity, string PlanId, int Version, string Hash, string Action, bool Succeeded, string Output) {
     public string? Approval { get; init; }
@@ -22,7 +25,9 @@ public sealed record HostResult(string Host, bool Reachable, string Output) {
     public DateTimeOffset? TgtStartUtc { get; init; }
     public DateTimeOffset? LastGroupChangeUtc { get; init; }
 }
-public sealed record ProbeResult(string Initiator, string Responder, string Expected, string Observed, bool Match, string Detail);
+public sealed record ProbeResult(string Initiator, string Responder, string Expected, string Observed, bool Match, string Detail) {
+    public WireObservation? Wire { get; init; }
+}
 
 // Executes compiled scripts under the identity of the user running IPsec Studio (like GPMC). No service account, no stored secrets.
 public sealed class Deployment(IConfiguration config, PlanRepository repository, IScriptRunner runner, ILogger<Deployment> logger) {
@@ -157,23 +162,48 @@ public sealed class Deployment(IConfiguration config, PlanRepository repository,
         if (!Enabled) throw new UnauthorizedAccessException(L.T("deploy.probeDisabled"));
         var plan = await repository.Get(request.PlanId) ?? throw new ValidationException(L.T("deploy.planNotFound"));
         if (plan.Version != request.Version) throw new ConflictException(L.T("deploy.stale"));
-        return await RunProbe(plan, await AppliedMembership(plan), request.ComputerIds, identity);
+        return await RunProbe(plan, await AppliedMembership(plan), request.ComputerIds, identity, request.Capture);
     }
-    async Task<ProbeResult[]> RunProbe(SavedPlan plan, InventorySnapshot membership, string[]? computerIds, string identity) {
+    async Task<ProbeResult[]> RunProbe(SavedPlan plan, InventorySnapshot membership, string[]? computerIds, string identity, bool capture = false) {
         var a = PlanRules.Assess(plan.Input, membership);
         var initiators = TargetHosts(plan, computerIds);
         var responders = a.Hosts.Where(h => h.Profile != "dc" && h.Ip is not null).Select(h => new { h.ComputerId, h.Name, Ip = h.Ip!, Port = ProbePort })
             .Concat(plan.Input.ExternalHosts.Select(x => new { ComputerId = x.Id, x.Name, Ip = x.Address, Port = ProbePort })).ToArray();
         var studioIps = System.Net.Dns.GetHostAddresses(Environment.MachineName).Where(ip => ip.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork).Select(ip => ip.ToString()).ToArray();
         var spec = new { initiators = initiators.Select(h => new { h.Name, Fqdn = h.Name + "." + plan.Inventory.Domain, h.ComputerId }), responders, studioIps };
-        var (ok, output) = await runner.Run(ProbeScript.Replace("__SPEC__", JsonSerializer.Serialize(spec)), TimeSpan.FromMinutes(10));
-        await repository.AppendDeployment(new(DateTimeOffset.UtcNow, identity, plan.Id, plan.Version, "", "probe", ok, output));
-        if (!ok) throw new InvalidOperationException(L.T("deploy.probeFailed", output));
+        // Capture on domain responders other than the Studio host itself; hosts outside the domain are never captured.
+        var captureHosts = capture ? a.Hosts.Where(h => h.Profile != "dc" && h.Ip is not null && !h.Name.Equals(Environment.MachineName, StringComparison.OrdinalIgnoreCase) && System.Text.RegularExpressions.Regex.IsMatch(h.Name, @"\A[A-Za-z0-9-]{1,63}\z"))
+            .Select(h => new { name = h.Name, fqdn = h.Name + "." + plan.Inventory.Domain }).ToArray() : [];
+        var started = Array.Empty<string>();
+        if (captureHosts.Length > 0) {
+            var (sok, sout) = await runner.Run(CaptureStartScript.Replace("__HOSTS__", JsonSerializer.Serialize(captureHosts)), TimeSpan.FromMinutes(5));
+            await repository.AppendDeployment(new(DateTimeOffset.UtcNow, identity, plan.Id, plan.Version, "", "capture-start", sok, sout));
+            if (sok) started = (JsonSerializer.Deserialize<CaptureHost[]>(sout, Json.Settings) ?? []).Where(h => h.Ok).Select(h => h.Host).ToArray();
+        }
+        string output; CaptureHost[] captured = [];
+        try {
+            var (ok, o) = await runner.Run(ProbeScript.Replace("__SPEC__", JsonSerializer.Serialize(spec)), TimeSpan.FromMinutes(10));
+            output = o;
+            await repository.AppendDeployment(new(DateTimeOffset.UtcNow, identity, plan.Id, plan.Version, "", "probe", ok, output));
+            if (!ok) throw new InvalidOperationException(L.T("deploy.probeFailed", output));
+        } finally {
+            if (started.Length > 0) {
+                var stopSpec = new { hosts = captureHosts.Where(h => started.Contains(h.name)), port = ProbePort };
+                var (tok, tout) = await runner.Run(CaptureStopScript.Replace("__SPEC__", JsonSerializer.Serialize(stopSpec)), TimeSpan.FromMinutes(10));
+                await repository.AppendDeployment(new(DateTimeOffset.UtcNow, identity, plan.Id, plan.Version, "", "capture-stop", tok, tout));
+                if (tok) captured = (JsonSerializer.Deserialize<CaptureHost[]>(tout, Json.Settings) ?? []).Where(h => h.Ok).ToArray();
+            }
+        }
+        var ips = a.Hosts.Where(h => h.Ip is not null).ToDictionary(h => h.ComputerId, h => h.Ip!);
         var raw = JsonSerializer.Deserialize<RawProbe[]>(output, Json.Settings) ?? [];
         return raw.Select(p => {
             var expected = p.Error is not null ? "indeterminate" : Simulator.Evaluate(plan.Input, membership, a, p.InitiatorId, p.ResponderId).Outcome;
             var observed = Classify(p.Tcp, p.Cipher, p.Error);
-            return new ProbeResult(p.Initiator, p.Responder, expected, observed, expected == observed, p.Error ?? $"tcp={p.Tcp} cipher={p.Cipher ?? "-"} integrity={p.Integrity ?? "-"} auth={p.Auth ?? "-"}");
+            var result = new ProbeResult(p.Initiator, p.Responder, expected, observed, expected == observed, p.Error ?? $"tcp={p.Tcp} cipher={p.Cipher ?? "-"} integrity={p.Integrity ?? "-"} auth={p.Auth ?? "-"}");
+            var host = captured.FirstOrDefault(h => h.Host.Equals(p.Responder, StringComparison.OrdinalIgnoreCase));
+            if (host is null || !ips.TryGetValue(p.InitiatorId, out var from) || !ips.TryGetValue(p.ResponderId, out var to)) return result;
+            var (esp, clear) = Wire.Count(host.Buckets ?? [], from, to, ProbePort);
+            return result with { Wire = new(esp, clear, Wire.Judge(expected, esp, clear)) };
         }).ToArray();
     }
     // Observed outcome from one probe: TCP result plus the quick mode SA read on the initiator.
@@ -210,10 +240,17 @@ foreach($name in @($spec.gpos)){
   $errors=@(); $rules=@(); $setting=$null
   try{ $rules=@(Get-NetIPsecRule -PolicyStore $store -ErrorAction Stop | ForEach-Object { $af=$_|Get-NetFirewallAddressFilter -ErrorAction Stop; @{name=$_.IPsecRuleName;inbound=$_.InboundSecurity.ToString();outbound=$_.OutboundSecurity.ToString();requireAuthorization=[bool]$_.RequireAuthorization;remoteAddress=(@($af.RemoteAddress) -join ',')} }) }catch{ $errors+="rules: $($_.Exception.Message)" }
   try{ $setting=Get-NetFirewallSetting -PolicyStore $store -ErrorAction Stop }catch{ $errors+="setting: $($_.Exception.Message)" }
+  $crypto=$null
+  try{
+    $mmSets=@(Get-NetIPsecMainModeCryptoSet -PolicyStore $store -ErrorAction Stop)
+    $qmSets=@(Get-NetIPsecQuickModeCryptoSet -PolicyStore $store -ErrorAction Stop)
+    $p1Sets=@(Get-NetIPsecPhase1AuthSet -PolicyStore $store -ErrorAction Stop)
+    $crypto=@{mainMode=@($mmSets | ForEach-Object { $_.Proposal } | ForEach-Object { "$($_.Encryption)-$($_.Hash)-$($_.KeyExchange)" });mainModeMinutes=$(if($mmSets.Count){[int]$mmSets[0].MaxMinutes}else{0});quickMode=@($qmSets | ForEach-Object { $_.Proposal } | ForEach-Object { "$($_.Encapsulation)-$($_.Encryption)-$($_.ESPHash)-$($_.MaxMinutes)" });phase1=@($p1Sets | ForEach-Object { $_.Proposal } | ForEach-Object { "$($_.AuthenticationMethod)" })}
+  }catch{ $errors+="crypto: $($_.Exception.Message)" }
   $perm=@(Get-GPPermission -Guid $g.Id -All | Where-Object { $_.Permission -eq 'GpoApply' } | ForEach-Object { $_.Trustee.Name })
   $acl=Get-Acl -Path ('AD:\'+$g.Path)
   $deny=@($acl.Access | Where-Object { $_.AccessControlType -eq 'Deny' -and $_.ObjectType -eq $apply } | ForEach-Object { $_.IdentityReference.Translate([Security.Principal.SecurityIdentifier]).Value })
-  $gpos+=@{name=$name;exists=$true;marker=$g.Description;version=[int]$g.Computer.DSVersion;linked=[bool]$links[$name];rules=$rules;authorizationSddl=[string]$setting.RemoteMachineTransportAuthorizationList;exemptions=[string]$setting.Exemptions;applyGroups=$perm;denySids=$deny;errors=$errors}
+  $gpos+=@{name=$name;exists=$true;marker=$g.Description;version=[int]$g.Computer.DSVersion;linked=[bool]$links[$name];rules=$rules;authorizationSddl=[string]$setting.RemoteMachineTransportAuthorizationList;exemptions=[string]$setting.Exemptions;applyGroups=$perm;denySids=$deny;errors=$errors;crypto=$crypto}
 }
 $external=@()
 foreach($g in (Get-GPO -All | Where-Object { $_.DisplayName -notin @($spec.gpos) })){
@@ -265,6 +302,68 @@ ConvertTo-Json @($results) -Compress -Depth 8
       @{computer=$env:COMPUTERNAME;studioRules=$rules;enabledIpsecRules=$all;authorizationList=[string]$setting.RemoteMachineTransportAuthorizationList;exemptions=[string]$setting.Exemptions;gpos=@($rules | ForEach-Object {$_.source} | Sort-Object -Unique);healthy=(@($rules | Where-Object {$_.status -ne 'OK'}).Count -eq 0 -and $rules.Count -gt 0);tgtStartUtc=$tgt;lastGroupChangeUtc=$lastChangeUtc}
     }
 """ + NL + RemoteEpilogue;
+    // Starts an NDIS packet capture on each responder. Refuses a host where another trace is already running.
+    const string CaptureStartScript = """
+$ErrorActionPreference='Stop'
+[Console]::OutputEncoding=[Text.UTF8Encoding]::new($false)
+$hosts=ConvertFrom-Json @'
+__HOSTS__
+'@
+$results=@()
+foreach($h in @($hosts)){
+  try{
+    [void](Invoke-Command -ComputerName $h.fqdn -ScriptBlock {
+      $dir='C:\ProgramData\IpsecStudio\capture'; New-Item -ItemType Directory -Path $dir -Force | Out-Null
+      $status=(netsh.exe trace show status) -join ' '
+      if($status -notmatch 'no trace session'){ throw "another trace session is running" }
+      Remove-Item (Join-Path $dir 'probe.*') -Force -ErrorAction SilentlyContinue
+      $out=netsh.exe trace start capture=yes report=no persistent=no maxsize=128 overwrite=yes tracefile=(Join-Path $dir 'probe.etl')
+      if($LASTEXITCODE -ne 0){ throw "netsh trace start failed: $($out -join ' ')" }
+    })
+    $results+=@{host=$h.name;ok=$true;error=$null;bytes=0;sha256=$null;buckets=@()}
+  }catch{ $results+=@{host=$h.name;ok=$false;error=$_.Exception.Message;bytes=0;sha256=$null;buckets=@()} }
+}
+ConvertTo-Json @($results) -Compress -Depth 4
+""";
+    // Stops the capture, decodes it with pktmon, buckets IPv4 packets (source, destination, port, esp/tcp) and deletes the files.
+    const string CaptureStopScript = """
+$ErrorActionPreference='Stop'
+[Console]::OutputEncoding=[Text.UTF8Encoding]::new($false)
+$spec=ConvertFrom-Json @'
+__SPEC__
+'@
+$results=@()
+foreach($h in @($spec.hosts)){
+  try{
+    $r=Invoke-Command -ComputerName $h.fqdn -ScriptBlock {
+      $dir='C:\ProgramData\IpsecStudio\capture'; $etl=Join-Path $dir 'probe.etl'; $txt=Join-Path $dir 'probe.txt'
+      try{
+        netsh.exe trace stop | Out-Null
+        if(-not (Test-Path $etl)){ throw 'capture file missing' }
+        $bytes=(Get-Item $etl).Length; $sha=(Get-FileHash $etl -Algorithm SHA256).Hash.ToLowerInvariant()
+        pktmon.exe etl2txt $etl --out $txt | Out-Null
+        if($LASTEXITCODE -ne 0){ throw 'pktmon etl2txt failed' }
+        $b=@{}
+        foreach($line in [IO.File]::ReadLines($txt)){
+          $m=[regex]::Match($line,'length \d+: (\d+\.\d+\.\d+\.\d+)(?:\.(\d+))? > (\d+\.\d+\.\d+\.\d+)(?:\.(\d+))?: (.*)$')
+          if(-not $m.Success){ continue }
+          $rest=$m.Groups[5].Value
+          $kind=if($rest -match '^(ESP|ip-proto-50)'){'esp'}elseif($rest -match '^Flags \['){'tcp'}else{$null}
+          if(-not $kind){ continue }
+          $port=if($kind -eq 'tcp' -and $m.Groups[4].Success){[int]$m.Groups[4].Value}else{0}
+          $key=$m.Groups[1].Value+'|'+$m.Groups[3].Value+'|'+$port+'|'+$kind
+          $b[$key]=1+[int]$b[$key]
+        }
+        $buckets=@($b.GetEnumerator() | ForEach-Object { $p=$_.Key -split '\|'; @{source=$p[0];destination=$p[1];port=[int]$p[2];kind=$p[3];count=[int]$_.Value} })
+        @{ok=$true;error=$null;bytes=$bytes;sha256=$sha;buckets=$buckets}
+      }catch{ @{ok=$false;error=$_.Exception.Message;bytes=0;sha256=$null;buckets=@()} }
+      finally{ Remove-Item $etl,$txt -Force -ErrorAction SilentlyContinue; Remove-Item (Join-Path $dir 'probe*.cab') -Force -ErrorAction SilentlyContinue }
+    }
+    $results+=@{host=$h.name;ok=[bool]$r.ok;error=$r.error;bytes=[long]$r.bytes;sha256=$r.sha256;buckets=@($r.buckets)}
+  }catch{ $results+=@{host=$h.name;ok=$false;error=$_.Exception.Message;bytes=0;sha256=$null;buckets=@()} }
+}
+ConvertTo-Json @($results) -Compress -Depth 6
+""";
     const string ProbeScript = """
 $ErrorActionPreference='Stop'
 [Console]::OutputEncoding=[Text.UTF8Encoding]::new($false)

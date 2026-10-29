@@ -4,7 +4,12 @@ namespace IpsecStudio;
 
 // What the directory holds for one Studio GPO, as read by the drift script (names/SIDs only, no free text interpreted).
 public sealed record DriftRuleReading(string Name, string Inbound, string Outbound, bool RequireAuthorization, string RemoteAddress);
-public sealed record DriftGpoReading(string Name, bool Exists, string? Marker, int Version, bool Linked, DriftRuleReading[] Rules, string AuthorizationSddl, string Exemptions, string[] ApplyGroups, string[] DenySids) { public string[] Errors { get; init; } = []; }
+public sealed record DriftGpoReading(string Name, bool Exists, string? Marker, int Version, bool Linked, DriftRuleReading[] Rules, string AuthorizationSddl, string Exemptions, string[] ApplyGroups, string[] DenySids) {
+    public string[] Errors { get; init; } = [];
+    public DriftCryptoReading? Crypto { get; init; }
+}
+// Proposals as "Encryption-Hash-KeyExchange" (main mode) and "Encapsulation-Encryption-ESPHash-MaxMinutes" (quick mode), in preference order.
+public sealed record DriftCryptoReading(string[] MainMode, int MainModeMinutes, string[] QuickMode, string[] Phase1);
 public sealed record DriftExternalReading(string Name, int RuleCount, string[] Links);
 public sealed record DriftReading(DriftGpoReading[] Gpos, DriftExternalReading[] External);
 public sealed record DriftGpoReport(string Name, bool Exists, string[] Differences);
@@ -41,10 +46,28 @@ public static class Drift {
             var applyExtra = r.ApplyGroups.Where(a => !a.Equals(g.ApplyGroup, StringComparison.OrdinalIgnoreCase) && !a.Equals("Authenticated Users", StringComparison.OrdinalIgnoreCase)).ToArray();
             if (applyExtra.Length > 0 || !r.ApplyGroups.Any(a => a.Equals(g.ApplyGroup, StringComparison.OrdinalIgnoreCase))) diff.Add(L.T("drift.field", g.Name, "apply", g.ApplyGroup, string.Join(",", r.ApplyGroups)));
             if (!r.DenySids.ToHashSet().SetEquals(g.DenyGroupSids)) diff.Add(L.T("drift.field", g.Name, "denyApply", string.Join(",", g.DenyGroupSids), string.Join(",", r.DenySids)));
+            var want = ExpectedCrypto(c, g);
+            if (r.Crypto is null) diff.Add(L.T("drift.cryptoUnread"));
+            else {
+                void Seq(string set, string field, string[] expected, string[] found) { if (!expected.SequenceEqual(found ?? [], StringComparer.OrdinalIgnoreCase)) diff.Add(L.T("drift.field", set, field, string.Join(" > ", expected), string.Join(" > ", found ?? []))); }
+                Seq("IpsecStudio-MM", "proposals", want.MainMode, r.Crypto.MainMode);
+                if (r.Crypto.MainModeMinutes != want.MainModeMinutes) diff.Add(L.T("drift.field", "IpsecStudio-MM", "minutes", want.MainModeMinutes, r.Crypto.MainModeMinutes));
+                Seq("IpsecStudio-QM", "proposals", want.QuickMode, r.Crypto.QuickMode);
+                Seq("IpsecStudio-P1", "authentication", want.Phase1, r.Crypto.Phase1);
+            }
+            var icmp = Normalize(r.Exemptions) is "" or "None" ? "" : Normalize(r.Exemptions);
+            if (!icmp.Equals(c.ExemptIcmp ? "Icmp" : "", StringComparison.OrdinalIgnoreCase)) diff.Add(L.T("drift.field", g.Name, "ICMP", c.ExemptIcmp ? "Icmp" : "-", icmp == "" ? "-" : icmp));
             gpos.Add(new(g.Name, true, diff.ToArray()));
         }
         var clean = gpos.All(x => x.Exists && x.Differences.Length == 0) && reading.External.Length == 0;
         return new(clean, gpos.ToArray(), reading.External, DateTimeOffset.UtcNow);
+    }
+    // What the compiler writes into each GPO, in the format Windows returns (confirmed on the lab DC).
+    public static DriftCryptoReading ExpectedCrypto(Compilation c, GpoSpec g) {
+        var k = c.Crypto;
+        var enc = $"ESP-{k.QuickModeEncryption}-{k.QuickModeIntegrity}-{k.QuickModeLifetimeMinutes}";
+        var plain = $"ESP-None-{k.QuickModeIntegrity}-{k.QuickModeLifetimeMinutes}";
+        return new([$"{k.MainModeEncryption}-{k.MainModeHash}-{k.KeyExchange}"], k.MainModeLifetimeMinutes, g.Encryption ? [enc] : [plain, enc], ["MachineKerb"]);
     }
     static string Normalize(string? value) => value is null || value.Equals("NotConfigured", StringComparison.OrdinalIgnoreCase) ? "" : value.Trim();
     public static DriftReading Parse(string json) { var r = JsonSerializer.Deserialize<DriftReading>(json, Json.Settings) ?? new([], []); return r with { Gpos = r.Gpos ?? [], External = r.External ?? [] }; }

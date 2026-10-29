@@ -126,7 +126,11 @@ public sealed record Expectation(string Initiator, string Responder, string Outc
 public sealed record GpoSpec(string Name, string Profile, string ApplyGroup, string ApplyGroupSid, string[] DenyGroupSids, string Inbound, string Outbound, bool Encryption, bool RequireAuthorization, string? AuthorizationSddl, string[] ComputerIds);
 public sealed record WaveCompilation(string WaveId, string Name, string[] ComputerIds, string ApplyScript, string RollbackScript, string Sha256);
 public sealed record GroupsCompilation(string[] Names, string Container, string ApplyScript, string Sha256);
-public sealed record Compilation(string PlanId, int PlanVersion, string SnapshotId, string Domain, string DomainSid, string Marker, GpoSpec[] Gpos, string[] ExemptAddresses, string ApplyScript, string RollbackScript, string Sha256);
+public sealed record Compilation(string PlanId, int PlanVersion, string SnapshotId, string Domain, string DomainSid, string Marker, GpoSpec[] Gpos, string[] ExemptAddresses, string ApplyScript, string RollbackScript, string Sha256) {
+    // Settings written into every GPO; kept so the Studio can compare them with what AD holds later.
+    public CryptoSettings Crypto { get; init; } = new();
+    public bool ExemptIcmp { get; init; }
+}
 
 public sealed record SavedPlan(string Id, int Version, string Name, DateTimeOffset CreatedAt, DateTimeOffset UpdatedAt, string SavedBy, PlanInput Input, InventorySnapshot Inventory, PlanAssessment Assessment) {
     public int SchemaVersion => 2;

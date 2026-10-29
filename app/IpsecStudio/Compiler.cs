@@ -69,7 +69,7 @@ public static partial class Compiler {
         var apply = ApplyTemplate.Replace("__SPEC__", json);
         var rollback = RollbackTemplate.Replace("__SPEC__", json);
         var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(apply + "\n--\n" + rollback))).ToLowerInvariant();
-        return new(plan.Id, plan.Version, snapshot.Id, snapshot.Domain, snapshot.DomainSid, marker, gpos.ToArray(), exempt, apply, rollback, hash);
+        return new(plan.Id, plan.Version, snapshot.Id, snapshot.Domain, snapshot.DomainSid, marker, gpos.ToArray(), exempt, apply, rollback, hash) { Crypto = input.Settings.Crypto, ExemptIcmp = input.Settings.ExemptIcmp };
     }
     // Wave: membership changes only. Everything is addressed by SID; names never reach PowerShell.
     public static WaveCompilation CompileWave(SavedPlan plan, string waveId) {

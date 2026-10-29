@@ -91,6 +91,7 @@ public static class L {
         ["drift.external"] = ("Outra GPO {0} com {1} regra(s) IPsec", "Other GPO {0} with {1} IPsec rule(s)"),
         ["drift.present"] = ("GPO já existe antes da aplicação; reverta ou confirme que está ciente.", "GPO already exists before apply; roll back or confirm you are aware."),
         ["drift.readError"] = ("Leitura falhou: {0}", "Read failed: {0}"),
+        ["drift.cryptoUnread"] = ("Configurações de criptografia não lidas.", "Crypto settings not read."),
         ["drift.blocked"] = ("Há alterações fora do Studio; confirme que está ciente para continuar: {0}", "Changes made outside the Studio; confirm you are aware to continue: {0}"),
         // simulator
         ["sim.sameHost"] = ("Mesmo host.", "Same host."),
