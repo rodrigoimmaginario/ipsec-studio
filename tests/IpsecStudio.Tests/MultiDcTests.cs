@@ -54,8 +54,8 @@ public class RefreshTests : IDisposable {
         await d.HostOperation(new(saved.Id, 1, "refresh"), "op");
         var s = runner.Scripts.Single();
         Assert.Contains("$studioIps=ConvertFrom-Json", s);
-        Assert.Contains("Where-Object {$_.RemoteEndpoint -notin $studioIps} | Remove-NetIPsecMainModeSA", s);
-        Assert.Contains("Where-Object {$_.RemoteEndpoint -notin $studioIps} | Remove-NetIPsecQuickModeSA", s);
+        Assert.Contains("-notin @(' + $keep + ')} | Remove-NetIPsecMainModeSA", s);
+        Assert.Contains("-notin @(' + $keep + ')} | Remove-NetIPsecQuickModeSA", s);
         Assert.True(runner.Timeouts.Single() >= TimeSpan.FromMinutes(6));
     }
 
@@ -68,5 +68,20 @@ public class RefreshTests : IDisposable {
     sealed class Runner : IScriptRunner {
         public readonly List<string> Scripts = []; public readonly List<TimeSpan> Timeouts = [];
         public Task<(bool Ok, string Output)> Run(string script, TimeSpan timeout) { Scripts.Add(script); Timeouts.Add(timeout); return Task.FromResult((true, "[]")); }
+    }
+}
+
+// Lab, CV4.DS5: gpupdate changes the IPsec policy under the Studio's own WinRM session (clear -> required on apply, protected ->
+// removed on rollback); the session then stalls 60-90 s per host. The refresh runs gpupdate detached from the session and polls
+// each host with fresh connections until it reports completion.
+public class DetachedRefreshTests {
+    [Fact]
+    public void Refresh_launches_gpupdate_detached_and_waits_for_a_completion_marker() {
+        var s = Deployment.RefreshScriptText;
+        Assert.Contains("Invoke-CimMethod -ClassName Win32_Process -MethodName Create", s);
+        Assert.Contains("-EncodedCommand", s);
+        Assert.Contains("refresh-$token.done", s);
+        Assert.Contains("Test-Path", s);
+        Assert.DoesNotContain("Invoke-Command -ComputerName $h -ArgumentList (,@($studioIps)) -ScriptBlock {\n      param($studioIps)\n      klist.exe -li 0x3e7 purge | Out-Null\n      gpupdate.exe", s);
     }
 }

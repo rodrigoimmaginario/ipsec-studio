@@ -308,17 +308,57 @@ foreach($h in @($hosts)){
 ConvertTo-Json @($results) -Compress -Depth 8
 """;
     const string NL = "\n";
-    const string RefreshScript = RemotePreamble + NL + """
-    $out=Invoke-Command -ComputerName $h -ArgumentList (,@($studioIps)) -ScriptBlock {
-      param($studioIps)
+    public static string RefreshScriptText => RefreshScript;
+    // gpupdate changes the host's IPsec policy; a WinRM session that crosses that change stalls 60-90 s (lab, CV4.DS5). So:
+    // 1) on each host, purge the machine tickets and start gpupdate + SA cleanup in a process of its own (not tied to the session);
+    // 2) poll every host with fresh connections until it writes its completion marker. SAs with the Studio host are kept.
+    const string RefreshScript = """
+$ErrorActionPreference='Stop'
+[Console]::OutputEncoding=[Text.UTF8Encoding]::new($false)
+$hosts=ConvertFrom-Json @'
+__HOSTS__
+'@
+$studioIps=ConvertFrom-Json @'
+__STUDIOIPS__
+'@
+$token=[guid]::NewGuid().ToString('N')
+$launched=@{}; $results=@()
+foreach($h in @($hosts)){
+  try{
+    Invoke-Command -ComputerName $h -ArgumentList $token,(,@($studioIps)) -ScriptBlock {
+      param($token,$studioIps)
       klist.exe -li 0x3e7 purge | Out-Null
-      gpupdate.exe /target:computer /force /wait:120 | Out-Null
-      # Fresh negotiations with every peer except the Studio host: its SA carries this WinRM session.
-      Get-NetIPsecMainModeSA -ErrorAction SilentlyContinue | Where-Object {$_.RemoteEndpoint -notin $studioIps} | Remove-NetIPsecMainModeSA -ErrorAction SilentlyContinue
-      Get-NetIPsecQuickModeSA -ErrorAction SilentlyContinue | Where-Object {$_.RemoteEndpoint -notin $studioIps} | Remove-NetIPsecQuickModeSA -ErrorAction SilentlyContinue
-      @{computer=$env:COMPUTERNAME;refreshedUtc=(Get-Date).ToUniversalTime().ToString('o');gpupdateExit=$LASTEXITCODE}
+      $dir='C:\ProgramData\IpsecStudio'; New-Item -ItemType Directory -Path $dir -Force | Out-Null
+      $keep=(@($studioIps) | ForEach-Object { "'" + $_ + "'" }) -join ','
+      $cmd='gpupdate.exe /target:computer /force /wait:120 | Out-Null; $x=$LASTEXITCODE; ' +
+           'Get-NetIPsecMainModeSA -ErrorAction SilentlyContinue | Where-Object {$_.RemoteEndpoint -notin @(' + $keep + ')} | Remove-NetIPsecMainModeSA -ErrorAction SilentlyContinue; ' +
+           'Get-NetIPsecQuickModeSA -ErrorAction SilentlyContinue | Where-Object {$_.RemoteEndpoint -notin @(' + $keep + ')} | Remove-NetIPsecQuickModeSA -ErrorAction SilentlyContinue; ' +
+           "Set-Content -Path '$dir\refresh-$token.done' -Value `$x"
+      $enc=[Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($cmd))
+      $p=Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{CommandLine="powershell.exe -NoProfile -NonInteractive -EncodedCommand $enc"}
+      if($p.ReturnValue -ne 0){ throw "Win32_Process.Create returned $($p.ReturnValue)" }
     }
-""" + NL + RemoteEpilogue;
+    $launched[$h]=$true
+  }catch{ $results+=@{host=$h;reachable=$false;output=$_.Exception.Message} }
+}
+$deadline=(Get-Date).AddSeconds(240)
+foreach($h in @($hosts | Where-Object { $launched[$_] })){
+  $done=$null; $last=''
+  while(-not $done -and (Get-Date) -lt $deadline){
+    try{
+      $done=Invoke-Command -ComputerName $h -ArgumentList $token -ScriptBlock {
+        param($token)
+        $f="C:\ProgramData\IpsecStudio\refresh-$token.done"
+        if(Test-Path $f){ $x=(Get-Content $f -Raw).Trim(); Remove-Item $f -Force; @{computer=$env:COMPUTERNAME;refreshedUtc=(Get-Date).ToUniversalTime().ToString('o');gpupdateExit=[int]$x} } else { $null }
+      }
+    }catch{ $last=$_.Exception.Message }
+    if(-not $done){ Start-Sleep -Seconds 5 }
+  }
+  if($done){ $results+=@{host=$h;reachable=$true;output=($done|ConvertTo-Json -Compress)} }
+  else{ $results+=@{host=$h;reachable=$false;output="refresh did not report completion in time. $last"} }
+}
+ConvertTo-Json @($results) -Compress -Depth 6
+""";
     const string VerifyScript = RemotePreamble + NL + """
     $outsideTarget='__OUTSIDE__'
     $out=Invoke-Command -ComputerName $h -ArgumentList $lastChange,$outsideTarget -ScriptBlock {
