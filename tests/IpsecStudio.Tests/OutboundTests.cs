@@ -79,9 +79,13 @@ public class OutboundTests : IDisposable {
         Assert.Contains(log, e => e.Action == "refresh" && !e.Succeeded);
     }
 
+    // Apply: the Studio host first (it needs the new policy to reach hosts that already require IPsec).
+    // Rollback: the Studio host last (it keeps the policy the others still require until they are refreshed).
     [Fact]
-    public void Studio_host_is_refreshed_last() =>
-        Assert.Equal(["app1", "db1", "admin1"], Deployment.StudioLast(["admin1", "app1", "db1"], h => h, "ADMIN1").ToArray());
+    public void Studio_host_goes_first_after_apply_and_last_after_rollback() {
+        Assert.Equal(["admin1", "app1", "db1"], Deployment.OrderStudio(["app1", "admin1", "db1"], h => h, "ADMIN1", last: false).ToArray());
+        Assert.Equal(["app1", "db1", "admin1"], Deployment.OrderStudio(["admin1", "app1", "db1"], h => h, "ADMIN1", last: true).ToArray());
+    }
 
     sealed class FakeRunner : IScriptRunner {
         public readonly List<string> Scripts = [];

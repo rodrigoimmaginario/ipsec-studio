@@ -42,8 +42,10 @@ public sealed class Deployment(IConfiguration config, PlanRepository repository,
             return v;
         }
     }
-    // The Studio host goes last: refreshing it first could drop the policy it still needs to reach the others.
-    public static IEnumerable<T> StudioLast<T>(IEnumerable<T> hosts, Func<T, string> name, string machine) => hosts.OrderBy(h => name(h).Equals(machine, StringComparison.OrdinalIgnoreCase));
+    // After apply the Studio host is refreshed first (it needs the new policy to reach hosts that already require IPsec);
+    // after rollback it goes last (it keeps the policy the others still require until they are refreshed).
+    public static IEnumerable<T> OrderStudio<T>(IEnumerable<T> hosts, Func<T, string> name, string machine, bool last) =>
+        hosts.OrderBy(h => name(h).Equals(machine, StringComparison.OrdinalIgnoreCase) == last ? 1 : 0);
     public async Task<DeploymentRecord> Execute(DeployRequest request, string identity) {
         if (!Enabled) throw new UnauthorizedAccessException(L.T("deploy.disabled"));
         if (request.Action is not ("apply" or "rollback" or "groups")) throw new ValidationException(L.T("deploy.action"));
@@ -69,7 +71,7 @@ public sealed class Deployment(IConfiguration config, PlanRepository repository,
             await repository.AppendDeployment(record);
             // Hosts keep a removed GPO until their next refresh; refresh them now (failures are recorded, the rollback stands).
             if (ok && request.Action == "rollback") {
-                try { await RunHosts(plan, null, "refresh", identity, PlanRules.AfterWaves(plan.Input, plan.Inventory, plan.Input.Waves.Length)); }
+                try { await RunHosts(plan, null, "refresh", identity, PlanRules.AfterWaves(plan.Input, plan.Inventory, plan.Input.Waves.Length), studioLast: true); }
                 catch (Exception ex) when (ex is not OperationCanceledException) { logger.LogWarning(ex, "Refresh after rollback failed"); }
             }
             return record;
@@ -145,8 +147,8 @@ public sealed class Deployment(IConfiguration config, PlanRepository repository,
         if (plan.Version != request.Version) throw new ConflictException(L.T("deploy.stale"));
         return await RunHosts(plan, request.ComputerIds, request.Action, identity);
     }
-    async Task<HostResult[]> RunHosts(SavedPlan plan, string[]? computerIds, string action, string identity, InventorySnapshot? membership = null) {
-        var hosts = StudioLast(TargetHosts(plan, computerIds, membership), h => h.Name, Environment.MachineName).ToArray();
+    async Task<HostResult[]> RunHosts(SavedPlan plan, string[]? computerIds, string action, string identity, InventorySnapshot? membership = null, bool studioLast = false) {
+        var hosts = OrderStudio(TargetHosts(plan, computerIds, membership), h => h.Name, Environment.MachineName, studioLast).ToArray();
         var script = (action == "refresh" ? RefreshScript : VerifyScript).Replace("__HOSTS__", JsonSerializer.Serialize(hosts.Select(h => h.Name + "." + plan.Inventory.Domain)))
             .Replace("__GROUPSIDS__", JsonSerializer.Serialize(ProfileGroupSids(plan))).Replace("__OUTSIDE__", action == "verify" ? OutsideCheck : "");
         var (ok, output) = await runner.Run(script, TimeSpan.FromMinutes(6));

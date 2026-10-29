@@ -107,6 +107,14 @@ public class RequestBindingTests {
 }
 
 public class ScriptRunnerTests {
+    // WinRM reconnect notices are host output, not the warning stream: they reach stdout even with $WarningPreference silenced.
+    [Fact]
+    public void Json_is_read_from_the_first_line_that_starts_it() {
+        var noisy = "WARNING: The network connection to app1.lab.ipsec.test has been interrupted. Attempting to reconnect for up to 4 \r\nminutes...\nWARNING: Attempting to reconnect to app1.lab.ipsec.test ...\n[{\"reachable\":true}]";
+        Assert.Equal("[{\"reachable\":true}]", PowerShellRunner.JsonPart(noisy));
+        Assert.Equal("{\"a\":1}", PowerShellRunner.JsonPart("{\"a\":1}"));
+        Assert.Equal("no json here", PowerShellRunner.JsonPart("no json here"));
+    }
     [Fact]
     public void Warnings_and_information_are_kept_out_of_the_json_output() {
         var p = PowerShellRunner.Prepare("ConvertTo-Json @(1)");
