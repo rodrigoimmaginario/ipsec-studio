@@ -41,7 +41,7 @@ vm.runInContext("state.hosts=[{host:'app1.lab.ipsec.test',reachable:true,output:
 vm.runInContext("state.saved={...saved, input: state.draft}; state.compilation = compilation; state.probe = routes_probe; state.page='deploy'; render()".replace('saved,', JSON.stringify(saved) + ',').replace('compilation;', JSON.stringify(compilation) + ';').replace('routes_probe', JSON.stringify(routes('/api/probe'))), context);
 assert.ok(main.innerHTML.includes('IpsecStudio-Restricted-SQL') && main.innerHTML.includes('Aplicar GPOs') && main.innerHTML.includes('Reverter') && main.innerHTML.includes('1/1 coincidem') && main.innerHTML.includes('New-GPO'), 'deploy panel with compilation, actions and probe');
 vm.runInContext("state.drift = routes_drift; render()".replace('routes_drift', JSON.stringify(routes('/x/drift'))), context);
-assert.ok(main.innerHTML.includes('Drift detectado') && main.innerHTML.includes('Corp-Legacy') && main.innerHTML.includes('id="ack-drift"') && main.innerHTML.includes('encontrado Request'), 'drift panel with acknowledgement');
+assert.ok(main.innerHTML.includes('Há alterações fora do Studio') && main.innerHTML.includes('Corp-Legacy') && main.innerHTML.includes('id="ack-drift"') && main.innerHTML.includes('encontrado Request'), 'drift panel with acknowledgement');
 assert.ok(main.innerHTML.includes('identidade pendente') && main.innerHTML.includes('data-action="renew-host"'), 'identity badge and per-host renew');
 assert.ok(main.innerHTML.includes('id="approval"') && main.innerHTML.includes('Aplicar onda') && main.innerHTML.includes('Preparar grupos no AD') && main.innerHTML.includes('não aplicada'), 'approval note, wave actions and group preparation');
 // language switch: English strings, persisted choice, pt-BR default restored
