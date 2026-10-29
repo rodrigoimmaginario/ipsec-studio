@@ -9,7 +9,8 @@ public sealed class DirectoryReader(IConfiguration config, IWebHostEnvironment e
     private readonly SemaphoreSlim gate = new(1, 1);
     public InventorySnapshot? Current { get; private set; }
     public string? LastError { get; private set; }
-    public string Server => config["Directory:Server"] ?? throw new InvalidOperationException("Directory server is required.");
+    // Empty = the domain DNS name: the AD cmdlets then locate any reachable DC (recommended with several DCs).
+    public string Server => string.IsNullOrWhiteSpace(config["Directory:Server"]) ? Domain : config["Directory:Server"]!.Trim();
     public string Domain => config["Directory:ExpectedDomain"] ?? throw new InvalidOperationException("Domain is required.");
     public async Task<InventorySnapshot> Refresh(CancellationToken cancellation) {
         if (!Regex.IsMatch(Server, @"\A[a-zA-Z0-9.-]{1,253}\z") || !Regex.IsMatch(Domain, @"\A[a-zA-Z0-9.-]{1,253}\z"))

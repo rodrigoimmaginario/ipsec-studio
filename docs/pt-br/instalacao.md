@@ -21,11 +21,12 @@ O resultado é autocontido (.NET 10); não exige instalar runtime na estação.
 | Chave | Significado |
 |---|---|
 | `Port` | Porta local (somente `127.0.0.1`) |
-| `Directory:Server` | Controlador de domínio consultado |
+| `Directory:Server` | Controlador de domínio consultado. Vazio = o nome do domínio, e o Windows escolhe um DC disponível (recomendado com vários DCs). Criar e remover GPOs continua exigindo o DC emulador PDC |
 | `Directory:ExpectedDomain` | Nome DNS do domínio; o inventário é recusado se vier de outro domínio |
 | `Storage:Root` | Pasta dos planos versionados e do registro de execuções |
 | `Deployment:Enabled` | `true` permite aplicar/reverter; `false` cria uma instância somente de leitura e planejamento |
 | `Deployment:ProbePort` | Porta TCP usada pela sonda (padrão 5985, WinRM) |
+| `Deployment:OutsideCheck` | Opcional, `IPv4:porta` fora da sub-rede segura que todo host verificado deve alcançar, por exemplo um servidor de atualização ou DNS externo. Se falhar, o host aparece como não saudável |
 
 As mesmas chaves podem vir de variáveis de ambiente (`Deployment__Enabled`, `Storage__Root`, …).
 

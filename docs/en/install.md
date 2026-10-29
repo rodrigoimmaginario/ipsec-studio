@@ -21,11 +21,12 @@ The output is self-contained (.NET 10); no runtime installation is required on t
 | Key | Meaning |
 |---|---|
 | `Port` | Local port (`127.0.0.1` only) |
-| `Directory:Server` | Domain controller to query |
+| `Directory:Server` | Domain controller to query. Empty = the domain name, and Windows picks an available DC (recommended with several DCs). Creating and removing GPOs still needs the PDC emulator DC |
 | `Directory:ExpectedDomain` | Domain DNS name; an inventory from another domain is refused |
 | `Storage:Root` | Folder for versioned plans and the execution log |
 | `Deployment:Enabled` | `true` allows apply/rollback; `false` creates a read-only planning instance |
 | `Deployment:ProbePort` | TCP port used by the probe (default 5985, WinRM) |
+| `Deployment:OutsideCheck` | Optional `IPv4:port` outside the secure subnet that every verified host must reach, e.g. an update server or external DNS. If it fails, the host shows as unhealthy |
 
 The same keys can come from environment variables (`Deployment__Enabled`, `Storage__Root`, …).
 

@@ -336,6 +336,131 @@
           "blocked"
         ]
       ]
+    },
+    {
+      "name": "fixtures",
+      "membership": {
+        "IPSEC-Exclusion": [],
+        "IPSEC-Boundary": [
+          "wsus1"
+        ]
+      },
+      "exemptions": [
+        "10.74.1.90"
+      ],
+      "externalHosts": [
+        [
+          "prn1",
+          "10.74.1.90"
+        ]
+      ],
+      "expect": [
+        [
+          "app1",
+          "db1",
+          "encrypted"
+        ],
+        [
+          "client-no",
+          "db1",
+          "blocked"
+        ],
+        [
+          "win10",
+          "db1",
+          "blocked"
+        ],
+        [
+          "win11",
+          "fs1",
+          "blocked"
+        ],
+        [
+          "win10",
+          "app1",
+          "authenticated"
+        ],
+        [
+          "app1",
+          "win11",
+          "authenticated"
+        ],
+        [
+          "win10",
+          "win11",
+          "authenticated"
+        ],
+        [
+          "admin1",
+          "win10",
+          "authenticated"
+        ],
+        [
+          "db1",
+          "win10",
+          "encrypted"
+        ],
+        [
+          "win11",
+          "wsus1",
+          "authenticated"
+        ],
+        [
+          "app1",
+          "wsus1",
+          "authenticated"
+        ],
+        [
+          "wsus1",
+          "win10",
+          "authenticated"
+        ],
+        [
+          "ext1",
+          "wsus1",
+          "clear"
+        ],
+        [
+          "ext1",
+          "win10",
+          "blocked"
+        ],
+        [
+          "ext1",
+          "win11",
+          "blocked"
+        ],
+        [
+          "win10",
+          "prn1",
+          "clear"
+        ],
+        [
+          "win11",
+          "prn1",
+          "clear"
+        ],
+        [
+          "db1",
+          "prn1",
+          "clear"
+        ],
+        [
+          "prn1",
+          "win11",
+          "clear"
+        ],
+        [
+          "win10",
+          "dc2",
+          "clear"
+        ],
+        [
+          "ext1",
+          "dc2",
+          "clear"
+        ]
+      ]
     }
   ],
   "baselineMembership": {
