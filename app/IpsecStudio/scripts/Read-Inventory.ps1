@@ -4,6 +4,8 @@ $ProgressPreference='SilentlyContinue'
 [Console]::OutputEncoding=[Text.UTF8Encoding]::new($false)
 try {
     Import-Module ActiveDirectory -ErrorAction Stop
+    # Server = the domain name: discover a DC that answers ADWS now, instead of a cached one that may be down (lab, CV4.DS5: dc1 off).
+    if($Server -eq $ExpectedDomain){ $Server=@((Get-ADDomainController -Discover -DomainName $ExpectedDomain -Service ADWS -ForceDiscover -ErrorAction Stop).HostName)[0] }
     $domain=Get-ADDomain -Server $Server
     if($domain.DNSRoot -ne $ExpectedDomain){throw 'O servidor consultado pertence a outro dominio.'}
     $base=$domain.DistinguishedName
