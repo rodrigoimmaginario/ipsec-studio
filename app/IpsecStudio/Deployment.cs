@@ -322,9 +322,12 @@ $studioIps=ConvertFrom-Json @'
 __STUDIOIPS__
 '@
 $token=[guid]::NewGuid().ToString('N')
-$launched=@{}; $results=@()
+$results=@()
+# One host at a time (Studio host first after apply, last after rollback): start the detached refresh, then wait for its marker.
 foreach($h in @($hosts)){
-  try{
+  $started=$false; $last=''
+  for($attempt=1; $attempt -le 4 -and -not $started; $attempt++){
+   try{
     Invoke-Command -ComputerName $h -ArgumentList $token,(,@($studioIps)) -ScriptBlock {
       param($token,$studioIps)
       klist.exe -li 0x3e7 purge | Out-Null
@@ -338,12 +341,11 @@ foreach($h in @($hosts)){
       $p=Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{CommandLine="powershell.exe -NoProfile -NonInteractive -EncodedCommand $enc"}
       if($p.ReturnValue -ne 0){ throw "Win32_Process.Create returned $($p.ReturnValue)" }
     }
-    $launched[$h]=$true
-  }catch{ $results+=@{host=$h;reachable=$false;output=$_.Exception.Message} }
-}
-$deadline=(Get-Date).AddSeconds(240)
-foreach($h in @($hosts | Where-Object { $launched[$_] })){
-  $done=$null; $last=''
+    $started=$true
+   }catch{ $last=$_.Exception.Message; Start-Sleep -Seconds 5 }
+  }
+  if(-not $started){ $results+=@{host=$h;reachable=$false;output=$last}; continue }
+  $deadline=(Get-Date).AddSeconds(150); $done=$null
   while(-not $done -and (Get-Date) -lt $deadline){
     try{
       $done=Invoke-Command -ComputerName $h -ArgumentList $token -ScriptBlock {
