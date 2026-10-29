@@ -44,6 +44,9 @@ public sealed class Deployment(IConfiguration config, PlanRepository repository,
     }
     // After apply the Studio host is refreshed first (it needs the new policy to reach hosts that already require IPsec);
     // after rollback it goes last (it keeps the policy the others still require until they are refreshed).
+    static string[] StudioIps() => System.Net.Dns.GetHostAddresses(Environment.MachineName).Where(ip => ip.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork).Select(ip => ip.ToString()).ToArray();
+    // Hosts are refreshed/verified one after another (gpupdate /wait:120 each): 1.5 minutes per host, never under 6.
+    public static TimeSpan HostsTimeout(int hosts) => TimeSpan.FromMinutes(Math.Max(6, Math.Ceiling(1.5 * hosts)));
     public static IEnumerable<T> OrderStudio<T>(IEnumerable<T> hosts, Func<T, string> name, string machine, bool last) =>
         hosts.OrderBy(h => name(h).Equals(machine, StringComparison.OrdinalIgnoreCase) == last ? 1 : 0);
     public async Task<DeploymentRecord> Execute(DeployRequest request, string identity) {
@@ -150,8 +153,9 @@ public sealed class Deployment(IConfiguration config, PlanRepository repository,
     async Task<HostResult[]> RunHosts(SavedPlan plan, string[]? computerIds, string action, string identity, InventorySnapshot? membership = null, bool studioLast = false) {
         var hosts = OrderStudio(TargetHosts(plan, computerIds, membership), h => h.Name, Environment.MachineName, studioLast).ToArray();
         var script = (action == "refresh" ? RefreshScript : VerifyScript).Replace("__HOSTS__", JsonSerializer.Serialize(hosts.Select(h => h.Name + "." + plan.Inventory.Domain)))
-            .Replace("__GROUPSIDS__", JsonSerializer.Serialize(ProfileGroupSids(plan))).Replace("__OUTSIDE__", action == "verify" ? OutsideCheck : "");
-        var (ok, output) = await runner.Run(script, TimeSpan.FromMinutes(6));
+            .Replace("__GROUPSIDS__", JsonSerializer.Serialize(ProfileGroupSids(plan))).Replace("__OUTSIDE__", action == "verify" ? OutsideCheck : "")
+            .Replace("__STUDIOIPS__", JsonSerializer.Serialize(StudioIps()));
+        var (ok, output) = await runner.Run(script, HostsTimeout(hosts.Length));
         await repository.AppendDeployment(new(DateTimeOffset.UtcNow, identity, plan.Id, plan.Version, "", action, ok, output));
         if (!ok) throw new InvalidOperationException(L.T("deploy.remoteFailed", output));
         var results = JsonSerializer.Deserialize<HostResult[]>(output, Json.Settings) ?? [];
@@ -186,7 +190,7 @@ public sealed class Deployment(IConfiguration config, PlanRepository repository,
         var initiators = TargetHosts(plan, computerIds);
         var responders = a.Hosts.Where(h => h.Profile != "dc" && h.Ip is not null).Select(h => new { h.ComputerId, h.Name, Ip = h.Ip!, Port = ProbePort })
             .Concat(plan.Input.ExternalHosts.Select(x => new { ComputerId = x.Id, x.Name, Ip = x.Address, Port = ProbePort })).ToArray();
-        var studioIps = System.Net.Dns.GetHostAddresses(Environment.MachineName).Where(ip => ip.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork).Select(ip => ip.ToString()).ToArray();
+        var studioIps = StudioIps();
         var spec = new { initiators = initiators.Select(h => new { h.Name, Fqdn = h.Name + "." + plan.Inventory.Domain, h.ComputerId }), responders, studioIps };
         // Capture on domain responders other than the Studio host itself; hosts outside the domain are never captured.
         var captureHosts = capture ? a.Hosts.Where(h => h.Profile != "dc" && h.Ip is not null && !h.Name.Equals(Environment.MachineName, StringComparison.OrdinalIgnoreCase) && System.Text.RegularExpressions.Regex.IsMatch(h.Name, @"\A[A-Za-z0-9-]{1,63}\z"))
@@ -287,6 +291,9 @@ __HOSTS__
 $groupSids=ConvertFrom-Json @'
 __GROUPSIDS__
 '@
+$studioIps=ConvertFrom-Json @'
+__STUDIOIPS__
+'@
 # Last change of any profile group (membership edits update whenChanged): hosts whose machine TGT predates it may still carry old groups.
 $lastChange=$null
 try{ Import-Module ActiveDirectory -ErrorAction Stop; $times=@(foreach($sid in @($groupSids)){ (Get-ADGroup -Identity $sid -Properties whenChanged).whenChanged }); if($times.Count){ $lastChange=($times | Sort-Object | Select-Object -Last 1).ToUniversalTime().ToString('o') } }catch{}
@@ -302,11 +309,13 @@ ConvertTo-Json @($results) -Compress -Depth 8
 """;
     const string NL = "\n";
     const string RefreshScript = RemotePreamble + NL + """
-    $out=Invoke-Command -ComputerName $h -ScriptBlock {
+    $out=Invoke-Command -ComputerName $h -ArgumentList (,@($studioIps)) -ScriptBlock {
+      param($studioIps)
       klist.exe -li 0x3e7 purge | Out-Null
       gpupdate.exe /target:computer /force /wait:120 | Out-Null
-      Get-NetIPsecMainModeSA -ErrorAction SilentlyContinue | Remove-NetIPsecMainModeSA -ErrorAction SilentlyContinue
-      Get-NetIPsecQuickModeSA -ErrorAction SilentlyContinue | Remove-NetIPsecQuickModeSA -ErrorAction SilentlyContinue
+      # Fresh negotiations with every peer except the Studio host: its SA carries this WinRM session.
+      Get-NetIPsecMainModeSA -ErrorAction SilentlyContinue | Where-Object {$_.RemoteEndpoint -notin $studioIps} | Remove-NetIPsecMainModeSA -ErrorAction SilentlyContinue
+      Get-NetIPsecQuickModeSA -ErrorAction SilentlyContinue | Where-Object {$_.RemoteEndpoint -notin $studioIps} | Remove-NetIPsecQuickModeSA -ErrorAction SilentlyContinue
       @{computer=$env:COMPUTERNAME;refreshedUtc=(Get-Date).ToUniversalTime().ToString('o');gpupdateExit=$LASTEXITCODE}
     }
 """ + NL + RemoteEpilogue;
