@@ -18,10 +18,11 @@ public class WireTests : IDisposable {
     [InlineData("encrypted", 0, 0, false)]
     [InlineData("encrypted", 10, 2, false)]
     [InlineData("clear", 0, 6, true)]
-    [InlineData("clear", 3, 6, false)]
+    [InlineData("clear", 3, 6, true)]
     [InlineData("clear", 0, 0, false)]
-    [InlineData("blocked", 0, 5, true)]
-    [InlineData("blocked", 2, 0, false)]
+    [InlineData("blocked", 0, 0, true)]
+    [InlineData("blocked", 5, 0, true)]
+    [InlineData("blocked", 0, 2, false)]
     public void Judge_requires_esp_for_protected_pairs_and_clear_tcp_for_clear_pairs(string expected, int esp, int clear, bool match) =>
         Assert.Equal(match, Wire.Judge(expected, esp, clear));
 
@@ -32,13 +33,16 @@ public class WireTests : IDisposable {
     }
 
     [Fact]
-    public void Count_takes_esp_both_ways_and_clear_tcp_only_from_initiator_to_the_probe_port() {
+    public void Count_separates_esp_clear_acceptance_and_clear_attempts() {
         WireBucket[] b = [
             new("10.74.1.20", "10.74.1.30", 0, "esp", 7), new("10.74.1.30", "10.74.1.20", 0, "esp", 5),
-            new("10.74.1.20", "10.74.1.30", 5985, "tcp", 2), new("10.74.1.30", "10.74.1.20", 49900, "tcp", 9),
-            new("10.74.1.20", "10.74.1.30", 445, "tcp", 4), new("10.74.1.50", "10.74.1.30", 0, "esp", 99)];
-        Assert.Equal((12, 2), Wire.Count(b, "10.74.1.20", "10.74.1.30", 5985));
-        Assert.Equal((0, 0), Wire.Count(b, "10.74.1.40", "10.74.1.30", 5985));
+            new("10.74.1.20", "10.74.1.30", 5985, "syn", 1),        // first SYN sent in clear while negotiating
+            new("10.74.1.30", "10.74.1.20", 5985, "synack", 2),     // responder accepted in clear
+            new("10.74.1.20", "10.74.1.30", 5985, "tcp", 3),        // clear segments after the handshake
+            new("10.74.1.20", "10.74.1.30", 445, "tcp", 4), new("10.74.1.30", "10.74.1.20", 445, "synack", 4),
+            new("10.74.1.50", "10.74.1.30", 0, "esp", 99)];
+        Assert.Equal((12, 5, 1), Wire.Count(b, "10.74.1.20", "10.74.1.30", 5985));
+        Assert.Equal((0, 0, 0), Wire.Count(b, "10.74.1.40", "10.74.1.30", 5985));
     }
 
     [Fact]
@@ -53,7 +57,8 @@ public class WireTests : IDisposable {
         var stop = JsonSerializer.Serialize(new[] {
             new { host = "db1", ok = true, error = (string?)null, bytes = 123456L, sha256 = "ab", buckets = new[] {
                 new { source = "10.74.1.20", destination = "10.74.1.30", port = 0, kind = "esp", count = 8 },
-                new { source = "10.74.1.50", destination = "10.74.1.30", port = 5985, kind = "tcp", count = 3 } } } }, Json.Settings);
+                new { source = "10.74.1.20", destination = "10.74.1.30", port = 5985, kind = "syn", count = 1 },
+                new { source = "10.74.1.50", destination = "10.74.1.30", port = 5985, kind = "syn", count = 3 } } } }, Json.Settings);
         runner.Reply = s => s.Contains("netsh.exe trace start") ? (true, "[{\"host\":\"db1\",\"ok\":true}]") : s.Contains("netsh.exe trace stop") ? (true, stop) : (true, probe);
         var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?> { ["Deployment:Enabled"] = "true", ["Deployment:ProbePort"] = "5985" }).Build();
         var d = new Deployment(config, repo, runner, NullLogger<Deployment>.Instance);
@@ -64,9 +69,9 @@ public class WireTests : IDisposable {
         Assert.DoesNotContain("ext1", runner.Scripts[0]); // outside the domain: never captured
         Assert.Contains("Remove-Item", runner.Scripts[2]); // capture files are deleted on the host
         var appDb = r.Single(x => x.Initiator == "app1");
-        Assert.Equal(new WireObservation(8, 0, true), appDb.Wire);
+        Assert.Equal(new WireObservation(8, 0, 1, true), appDb.Wire); // the dropped clear SYN is an attempt, not acceptance
         var clientDb = r.Single(x => x.Initiator == "client-no");
-        Assert.Equal(new WireObservation(0, 3, true), clientDb.Wire); // blocked: clear SYNs arrive, no ESP
+        Assert.Equal(new WireObservation(0, 0, 3, true), clientDb.Wire); // blocked: clear SYNs arrive, never accepted
         Assert.Null(r.Single(x => x.Responder == "ext1").Wire);
     }
 

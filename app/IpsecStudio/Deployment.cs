@@ -202,8 +202,8 @@ public sealed class Deployment(IConfiguration config, PlanRepository repository,
             var result = new ProbeResult(p.Initiator, p.Responder, expected, observed, expected == observed, p.Error ?? $"tcp={p.Tcp} cipher={p.Cipher ?? "-"} integrity={p.Integrity ?? "-"} auth={p.Auth ?? "-"}");
             var host = captured.FirstOrDefault(h => h.Host.Equals(p.Responder, StringComparison.OrdinalIgnoreCase));
             if (host is null || !ips.TryGetValue(p.InitiatorId, out var from) || !ips.TryGetValue(p.ResponderId, out var to)) return result;
-            var (esp, clear) = Wire.Count(host.Buckets ?? [], from, to, ProbePort);
-            return result with { Wire = new(esp, clear, Wire.Judge(expected, esp, clear)) };
+            var (esp, clear, attempts) = Wire.Count(host.Buckets ?? [], from, to, ProbePort);
+            return result with { Wire = new(esp, clear, attempts, Wire.Judge(expected, esp, clear)) };
         }).ToArray();
     }
     // Observed outcome from one probe: TCP result plus the quick mode SA read on the initiator.
@@ -348,9 +348,16 @@ foreach($h in @($spec.hosts)){
           $m=[regex]::Match($line,'length \d+: (\d+\.\d+\.\d+\.\d+)(?:\.(\d+))? > (\d+\.\d+\.\d+\.\d+)(?:\.(\d+))?: (.*)$')
           if(-not $m.Success){ continue }
           $rest=$m.Groups[5].Value
-          $kind=if($rest -match '^(ESP|ip-proto-50)'){'esp'}elseif($rest -match '^Flags \['){'tcp'}else{$null}
+          $kind=$null; $port=0
+          if($rest -match '^(ESP|ip-proto-50)'){ $kind='esp' }
+          elseif($rest -match '^Flags \[([^\]]*)\]'){
+            $fl=$matches[1]
+            # syn = clear connection attempt (port = destination); synack = responder accepting in clear (port = source); tcp = other clear segment (port = destination).
+            if($fl -match 'S' -and $fl -notmatch '\.'){ $kind='syn'; $port=[int]$m.Groups[4].Value }
+            elseif($fl -match 'S'){ $kind='synack'; $port=[int]$m.Groups[2].Value }
+            else{ $kind='tcp'; $port=[int]$m.Groups[4].Value }
+          }
           if(-not $kind){ continue }
-          $port=if($kind -eq 'tcp' -and $m.Groups[4].Success){[int]$m.Groups[4].Value}else{0}
           $key=$m.Groups[1].Value+'|'+$m.Groups[3].Value+'|'+$port+'|'+$kind
           $b[$key]=1+[int]$b[$key]
         }
