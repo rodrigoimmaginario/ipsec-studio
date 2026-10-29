@@ -16,7 +16,7 @@ IPsec Studio turns the classic *Server and Domain Isolation* model (IPsec + Grou
 | 2 | **Authenticated base** | Isolated domain: inbound requires IPsec (machine Kerberos, ESP/null), outbound requests |
 | 3 | **No IPsec** | Computers without policy and exempt addresses (printers, WSUS, firewalls) treated in clear by everyone |
 | 4 | **Boundary** | Accepts clear inbound from peers without IPsec and negotiates with those that can |
-| 5 | **Quarantine** | Requires IPsec both ways and authorizes only the management group; everyone else refuses connections from it — just add the machine to the group |
+| 5 | **Quarantine** | Requires IPsec inbound and authorizes only the management group; everyone else refuses connections from it — just add the machine to the group |
 
 Each computer receives exactly **one profile GPO**: security-group filtering with *Deny Apply* for every other profile. Machine authorization lives in the **IPsec transport authorization list** (Allow for the access group, Deny for the exclusion group), decided by the responder.
 

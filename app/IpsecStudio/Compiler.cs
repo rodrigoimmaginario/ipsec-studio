@@ -23,7 +23,8 @@ public static partial class Compiler {
             foreach (var s in allow.Distinct()) aces.Append($"(A;;CC;;;{s})");
             return aces.ToString();
         }
-        var (bIn, bOut) = input.BaseMode switch { "require" => ("Require", "Require"), "request" => ("Request", "Request"), _ => ("Require", "Request") };
+        var (bIn, bOut) = PlanRules.Modes(input, "base");
+        var (sIn, sOut) = PlanRules.Modes(input, "restricted");
         var otherGroups = new List<string>();
         var gpos = new List<GpoSpec>();
         var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -33,7 +34,7 @@ public static partial class Compiler {
             var allow = new List<string> { Sid(r.ProtectedGroupId) };
             allow.Add(r.AccessGroupId is null ? baseGroup.Sid! : Sid(r.AccessGroupId));
             if (input.Settings.ManagementGroupId is not null) allow.Add(Sid(input.Settings.ManagementGroupId));
-            gpos.Add(new(Name("Restricted-" + slug[..Math.Min(24, slug.Length)]), "restricted", map[r.ProtectedGroupId].Name, Sid(r.ProtectedGroupId), [], "Require", "Require", r.Encryption, true, Sddl(allow, true), a.Hosts.Where(h => h.RestrictedId == r.Id).Select(h => h.ComputerId).ToArray()));
+            gpos.Add(new(Name("Restricted-" + slug[..Math.Min(24, slug.Length)]), "restricted", map[r.ProtectedGroupId].Name, Sid(r.ProtectedGroupId), [], sIn, sOut, r.Encryption, true, Sddl(allow, true), a.Hosts.Where(h => h.RestrictedId == r.Id).Select(h => h.ComputerId).ToArray()));
             otherGroups.Add(Sid(r.ProtectedGroupId));
         }
         if (input.BoundaryGroupId is not null) {
@@ -46,7 +47,7 @@ public static partial class Compiler {
         }
         if (input.ExclusionGroupId is not null) {
             var allow = input.Settings.ManagementGroupId is null ? Array.Empty<string>() : [Sid(input.Settings.ManagementGroupId)];
-            gpos.Add(new(Name("Quarantine"), "quarantine", map[input.ExclusionGroupId].Name, exclusionSid!, [], "Require", "Require", false, true, Sddl(allow, false), a.Hosts.Where(h => h.Profile == "quarantine").Select(h => h.ComputerId).ToArray()));
+            gpos.Add(new(Name("Quarantine"), "quarantine", map[input.ExclusionGroupId].Name, exclusionSid!, [], sIn, sOut, false, true, Sddl(allow, false), a.Hosts.Where(h => h.Profile == "quarantine").Select(h => h.ComputerId).ToArray()));
             otherGroups.Add(exclusionSid!);
         }
         var denyBase = otherGroups.ToList();

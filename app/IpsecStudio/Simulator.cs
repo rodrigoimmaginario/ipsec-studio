@@ -46,12 +46,10 @@ public static class Simulator {
             return local.AccessIds.Contains(remote.Id) || local.ProtectedIds.Contains(remote.Id);
         return remote.Profile is not ("noPolicy" or "external");
     }
-    static (string Out, string In) Modes(PlanInput plan, Endpoint e) => e.Profile switch {
-        "restricted" or "quarantine" => ("require", "require"),
-        "boundary" => ("request", "request"),
-        "base" or "management" => plan.BaseMode switch { "require" => ("require", "require"), "request" => ("request", "request"), _ => ("request", "require") },
-        _ => ("none", "none")
-    };
+    static (string Out, string In) Modes(PlanInput plan, Endpoint e) {
+        var (i, o) = PlanRules.Modes(plan, e.Profile);
+        return (o.ToLowerInvariant(), i.ToLowerInvariant());
+    }
     static Endpoint Resolve(PlanInput plan, InventorySnapshot snapshot, PlanAssessment a, string key) {
         var host = a.Hosts.FirstOrDefault(h => h.ComputerId == key);
         if (host is not null) {

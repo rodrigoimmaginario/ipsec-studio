@@ -8,7 +8,7 @@
 
 ## 02 · Perfis
 
-- **Base autenticada**: grupo da base (padrão *Domain Computers*) e modo. *Entrada exige / saída solicita* é o isolamento de domínio clássico; *exige/exige* elimina qualquer fallback; *solicita/solicita* serve para preparação.
+- **Base autenticada**: grupo da base (padrão *Domain Computers*) e modo. *Entrada exige / saída solicita* é o isolamento de domínio clássico; *exige/exige* elimina qualquer fallback, mas corta o acesso fora da sub-rede segura (não recomendado); *solicita/solicita* serve para preparação.
 - **Servidores restritos**: um ou mais perfis, cada um com grupo protegido, grupo de acesso opcional (sem grupo = qualquer computador autenticado) e cifra.
 - **Sem IPsec**: grupo de computadores que não recebe política e endereços isentos (IPv4 ou CIDR) com justificativa e responsável.
 - **Fronteira**: grupo que aceita entrada em claro.

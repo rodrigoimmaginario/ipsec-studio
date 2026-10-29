@@ -70,10 +70,10 @@ public class DeploymentTests : IDisposable {
         runner.Reply = _ => (true, JsonSerializer.Serialize(new[] {
             new { initiator = "app1", initiatorId = f.App1.Id, responder = "db1", responderId = f.Db1.Id, tcp = true, cipher = (string?)"AES256", integrity = (string?)"SHA256", auth = (string?)"Kerberos", error = (string?)null },
             new { initiator = "client-no", initiatorId = f.ClientNo.Id, responder = "db1", responderId = f.Db1.Id, tcp = true, cipher = (string?)"None", integrity = (string?)"SHA256", auth = (string?)"Kerberos", error = (string?)null },
-            new { initiator = "fs1", initiatorId = f.Fs1.Id, responder = "ext1", responderId = f.Ext1.Id, tcp = false, cipher = (string?)null, integrity = (string?)null, auth = (string?)null, error = (string?)null } }));
+            new { initiator = "fs1", initiatorId = f.Fs1.Id, responder = "ext1", responderId = f.Ext1.Id, tcp = true, cipher = (string?)null, integrity = (string?)null, auth = (string?)null, error = (string?)null } }));
         var r = await deployment.Probe(new(saved.Id, 1, "probe"), "op");
-        Assert.Equal(["encrypted", "blocked", "blocked"], r.Select(x => x.Expected));
-        Assert.Equal(["encrypted", "authenticated", "blocked"], r.Select(x => x.Observed));
+        Assert.Equal(["encrypted", "blocked", "clear"], r.Select(x => x.Expected)); // restricted falls back to clear towards ext1 (no outbound Require)
+        Assert.Equal(["encrypted", "authenticated", "clear"], r.Select(x => x.Observed));
         Assert.Equal([true, false, true], r.Select(x => x.Match));
         var script = runner.Scripts.Single();
         Assert.Contains("\"ip\":\"10.74.1.60\"", script.ToLowerInvariant().Replace(" ", "")); // external host is a responder

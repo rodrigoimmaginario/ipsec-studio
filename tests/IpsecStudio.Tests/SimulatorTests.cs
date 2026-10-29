@@ -23,7 +23,7 @@ public class SimulatorTests {
         Assert.Equal("authenticated", f.Outcome(f.ClientNo.Id, f.App1.Id));
         Assert.Equal("blocked", f.Outcome(f.Ext1.Id, f.App1.Id));
         Assert.Equal("clear", f.Outcome(f.App1.Id, f.Ext1.Id));
-        Assert.Equal("blocked", f.Outcome(f.Db1.Id, f.Ext1.Id));
+        Assert.Equal("clear", f.Outcome(f.Db1.Id, f.Ext1.Id)); // restricted: Require in, Request out (lab 29/10)
         Assert.Equal("clear", f.Outcome(f.Ext1.Id, f.Wsus.Id));
         Assert.Equal("authenticated", f.Outcome(f.App1.Id, f.Wsus.Id));
         Assert.Equal("blocked", f.Outcome(f.Legacy.Id, f.App1.Id));

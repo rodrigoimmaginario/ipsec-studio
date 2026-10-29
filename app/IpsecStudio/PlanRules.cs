@@ -173,8 +173,22 @@ public static partial class PlanRules {
         profiles.Add(new("exclusion", L.T("profile.exclusion"), hosts.Where(h => h.Excluded).Select(h => h.ComputerId).ToArray(), [], [L.T("profile.exclusion.note")]));
         if (management.Count > 0) profiles.Add(new("management", L.T("profile.management"), hosts.Where(h => h.Profile == "management").Select(h => h.ComputerId).ToArray(), [], [L.T("profile.management.note")]));
         if (input.BaseMode == "request") warnings.Add(L.T("base.requestWarning"));
+        var strict = new List<string>();
+        if (input.BaseMode == "require") strict.Add(L.T("label.base"));
+        if (input.Settings.RequireOutbound) {
+            strict.AddRange(input.Restricted.Where(r => r.Included).Select(r => r.Name));
+            if (input.ExclusionGroupId is not null) strict.Add(L.T("label.quarantine"));
+        }
+        if (strict.Count > 0) warnings.Insert(0, L.T("outbound.requireAlert", string.Join(", ", strict)));
         return new(hosts.ToArray(), profiles.ToArray(), exemptAddresses.Distinct().ToArray(), dcAddresses, warnings.Distinct().ToArray());
     }
+    // Windows modes (inbound, outbound) per profile; the compiler and the simulator share this single source.
+    public static (string In, string Out) Modes(PlanInput input, string profile) => profile switch {
+        "restricted" or "quarantine" => ("Require", input.Settings.RequireOutbound ? "Require" : "Request"),
+        "boundary" => ("Request", "Request"),
+        "base" or "management" => input.BaseMode switch { "require" => ("Require", "Require"), "request" => ("Request", "Request"), _ => ("Require", "Request") },
+        _ => ("None", "None")
+    };
     public static string ModeText(string mode) => mode switch {
         "secureRequest" => L.T("mode.secureRequest"),
         "request" => L.T("mode.request"),

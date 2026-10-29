@@ -17,7 +17,7 @@ public class CompilerTests {
         Assert.Equal($"O:LSD:(D;;CC;;;{f.Exclusion.Sid})(A;;CC;;;{DomainSid}-515)", b.AuthorizationSddl);
         Assert.Equal(("Require", "Request"), (b.Inbound, b.Outbound)); Assert.True(b.RequireAuthorization);
         var s = c.Gpos.Single(g => g.ApplyGroup == "IPSEC-SQL-Servers");
-        Assert.True(s.Encryption); Assert.Equal(("Require", "Require"), (s.Inbound, s.Outbound));
+        Assert.True(s.Encryption); Assert.Equal(("Require", "Request"), (s.Inbound, s.Outbound)); // no outbound Require by default (lab 29/10)
         Assert.Equal($"O:LSD:(D;;CC;;;{f.Exclusion.Sid})(A;;CC;;;{f.SqlServers.Sid})(A;;CC;;;{f.SqlClients.Sid})(A;;CC;;;{f.AdminClients.Sid})", s.AuthorizationSddl);
         Assert.Equal([f.NoPolicy.Sid!, f.Exclusion.Sid!], s.DenyGroupSids);
         var bd = c.Gpos.Single(g => g.Profile == "boundary"); Assert.Equal("Request", bd.Inbound); Assert.False(bd.RequireAuthorization); Assert.Null(bd.AuthorizationSddl);

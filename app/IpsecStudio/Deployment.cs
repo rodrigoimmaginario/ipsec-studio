@@ -34,6 +34,16 @@ public sealed class Deployment(IConfiguration config, PlanRepository repository,
     private readonly SemaphoreSlim gate = new(1, 1);
     public bool Enabled => config.GetValue("Deployment:Enabled", false);
     public int ProbePort => Math.Clamp(config.GetValue("Deployment:ProbePort", 5985), 1, 65535);
+    // Optional "IPv4:port" outside the secure subnet that every verified host must reach (lab: Azure WireServer 168.63.129.16:80).
+    public string OutsideCheck {
+        get {
+            var v = (config["Deployment:OutsideCheck"] ?? "").Trim();
+            if (v.Length > 0 && !System.Text.RegularExpressions.Regex.IsMatch(v, @"\A(\d{1,3}\.){3}\d{1,3}:\d{1,5}\z")) throw new ValidationException(L.T("deploy.outsideInvalid"));
+            return v;
+        }
+    }
+    // The Studio host goes last: refreshing it first could drop the policy it still needs to reach the others.
+    public static IEnumerable<T> StudioLast<T>(IEnumerable<T> hosts, Func<T, string> name, string machine) => hosts.OrderBy(h => name(h).Equals(machine, StringComparison.OrdinalIgnoreCase));
     public async Task<DeploymentRecord> Execute(DeployRequest request, string identity) {
         if (!Enabled) throw new UnauthorizedAccessException(L.T("deploy.disabled"));
         if (request.Action is not ("apply" or "rollback" or "groups")) throw new ValidationException(L.T("deploy.action"));
@@ -57,6 +67,11 @@ public sealed class Deployment(IConfiguration config, PlanRepository repository,
             var (ok, output) = await runner.Run(script, TimeSpan.FromMinutes(10));
             var record = new DeploymentRecord(DateTimeOffset.UtcNow, identity, plan.Id, plan.Version, hash, request.Action, ok, output) { Approval = request.Approval?.Trim() };
             await repository.AppendDeployment(record);
+            // Hosts keep a removed GPO until their next refresh; refresh them now (failures are recorded, the rollback stands).
+            if (ok && request.Action == "rollback") {
+                try { await RunHosts(plan, null, "refresh", identity, PlanRules.AfterWaves(plan.Input, plan.Inventory, plan.Input.Waves.Length)); }
+                catch (Exception ex) when (ex is not OperationCanceledException) { logger.LogWarning(ex, "Refresh after rollback failed"); }
+            }
             return record;
         } finally { gate.Release(); }
     }
@@ -130,10 +145,10 @@ public sealed class Deployment(IConfiguration config, PlanRepository repository,
         if (plan.Version != request.Version) throw new ConflictException(L.T("deploy.stale"));
         return await RunHosts(plan, request.ComputerIds, request.Action, identity);
     }
-    async Task<HostResult[]> RunHosts(SavedPlan plan, string[]? computerIds, string action, string identity) {
-        var hosts = TargetHosts(plan, computerIds);
+    async Task<HostResult[]> RunHosts(SavedPlan plan, string[]? computerIds, string action, string identity, InventorySnapshot? membership = null) {
+        var hosts = StudioLast(TargetHosts(plan, computerIds, membership), h => h.Name, Environment.MachineName).ToArray();
         var script = (action == "refresh" ? RefreshScript : VerifyScript).Replace("__HOSTS__", JsonSerializer.Serialize(hosts.Select(h => h.Name + "." + plan.Inventory.Domain)))
-            .Replace("__GROUPSIDS__", JsonSerializer.Serialize(ProfileGroupSids(plan)));
+            .Replace("__GROUPSIDS__", JsonSerializer.Serialize(ProfileGroupSids(plan))).Replace("__OUTSIDE__", action == "verify" ? OutsideCheck : "");
         var (ok, output) = await runner.Run(script, TimeSpan.FromMinutes(6));
         await repository.AppendDeployment(new(DateTimeOffset.UtcNow, identity, plan.Id, plan.Version, "", action, ok, output));
         if (!ok) throw new InvalidOperationException(L.T("deploy.remoteFailed", output));
@@ -209,8 +224,8 @@ public sealed class Deployment(IConfiguration config, PlanRepository repository,
     // Observed outcome from one probe: TCP result plus the quick mode SA read on the initiator.
     public static string Classify(bool tcp, string? cipher, string? error) => error is not null ? "unreachable" : !tcp ? "blocked" : cipher is null ? "clear" : cipher == "None" ? "authenticated" : "encrypted";
     sealed record RawProbe(string Initiator, string InitiatorId, string Responder, string ResponderId, bool Tcp, string? Cipher, string? Integrity, string? Auth, string? Error);
-    static HostProfile[] TargetHosts(SavedPlan plan, string[]? ids) {
-        var a = PlanRules.Assess(plan.Input, plan.Inventory);
+    static HostProfile[] TargetHosts(SavedPlan plan, string[]? ids, InventorySnapshot? membership = null) {
+        var a = PlanRules.Assess(plan.Input, membership ?? plan.Inventory);
         var hosts = a.Hosts.Where(h => h.Profile != "dc" && h.Profile != "none");
         if (ids is { Length: > 0 }) hosts = hosts.Where(h => ids.Contains(h.ComputerId));
         var result = hosts.ToArray();
@@ -292,14 +307,18 @@ ConvertTo-Json @($results) -Compress -Depth 8
     }
 """ + NL + RemoteEpilogue;
     const string VerifyScript = RemotePreamble + NL + """
-    $out=Invoke-Command -ComputerName $h -ArgumentList $lastChange -ScriptBlock {
-      param($lastChangeUtc)
+    $outsideTarget='__OUTSIDE__'
+    $out=Invoke-Command -ComputerName $h -ArgumentList $lastChange,$outsideTarget -ScriptBlock {
+      param($lastChangeUtc,$outsideTarget)
+      # Reachability outside the secure subnet (null when not configured): outbound Require on the subnet was seen to cut it.
+      $outside=$null
+      if($outsideTarget){ $ip,$port=$outsideTarget -split ':'; $c=New-Object Net.Sockets.TcpClient; try{ $a=$c.BeginConnect($ip,[int]$port,$null,$null); $outside=($a.AsyncWaitHandle.WaitOne(5000) -and $c.Connected) }catch{ $outside=$false } finally{ $c.Close() } }
       $tgt=$null
       try{ $text=(klist.exe -li 0x3e7 tgt 2>&1 | Out-String);  if($text -match 'Start\s*Time\s*:\s*([^\r\n]+?)\s*\(local\)'){ $tgt=[datetime]::Parse($matches[1],[Globalization.CultureInfo]::CurrentCulture).ToUniversalTime().ToString('o') } }catch{}
       $rules=@(Get-NetIPsecRule -PolicyStore ActiveStore -TracePolicyStore | Where-Object DisplayName -like 'IpsecStudio*' | ForEach-Object {@{name=$_.IPsecRuleName;display=$_.DisplayName;inbound=$_.InboundSecurity.ToString();outbound=$_.OutboundSecurity.ToString();requireAuthorization=[bool]$_.RequireAuthorization;source=$_.PolicyStoreSource;enabled=$_.Enabled.ToString();status=$_.PrimaryStatus.ToString();statusText=[string]$_.Status}})
       $setting=Get-NetFirewallSetting -PolicyStore ActiveStore
       $all=@(Get-NetIPsecRule -PolicyStore ActiveStore | Where-Object Enabled -eq True).Count
-      @{computer=$env:COMPUTERNAME;studioRules=$rules;enabledIpsecRules=$all;authorizationList=[string]$setting.RemoteMachineTransportAuthorizationList;exemptions=[string]$setting.Exemptions;gpos=@($rules | ForEach-Object {$_.source} | Sort-Object -Unique);healthy=(@($rules | Where-Object {$_.status -ne 'OK'}).Count -eq 0 -and $rules.Count -gt 0);tgtStartUtc=$tgt;lastGroupChangeUtc=$lastChangeUtc}
+      @{computer=$env:COMPUTERNAME;studioRules=$rules;enabledIpsecRules=$all;authorizationList=[string]$setting.RemoteMachineTransportAuthorizationList;exemptions=[string]$setting.Exemptions;gpos=@($rules | ForEach-Object {$_.source} | Sort-Object -Unique);healthy=(@($rules | Where-Object {$_.status -ne 'OK'}).Count -eq 0 -and $rules.Count -gt 0 -and $outside -ne $false);outside=$outside;tgtStartUtc=$tgt;lastGroupChangeUtc=$lastChangeUtc}
     }
 """ + NL + RemoteEpilogue;
     // Starts an NDIS packet capture on each responder. Refuses a host where another trace is already running.

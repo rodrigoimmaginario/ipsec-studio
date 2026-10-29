@@ -45,6 +45,8 @@ public sealed record PlanSettings {
     public string[] SecureSubnets { get; init; } = [];
     public bool ExemptDomainControllers { get; init; } = true;
     public bool ExemptIcmp { get; init; } = true;
+    // Outbound Require for restricted and quarantine. Off by default: in the lab it cut all traffic leaving the secure subnet.
+    public bool RequireOutbound { get; init; }
     // "domain" or the DN of an OU where the GPOs are linked.
     public string LinkTarget { get; init; } = "domain";
     public CryptoSettings Crypto { get; init; } = new();

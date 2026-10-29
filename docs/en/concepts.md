@@ -11,10 +11,10 @@ Domain isolation: only trusted computers (domain members authenticated with mach
 | Profile | GPO | Main rule | Authorization list |
 |---|---|---|---|
 | Authenticated base | `IpsecStudio-Base` → base group (default *Domain Computers*) | Inbound *Require*, outbound *Request* (configurable) | Allow base group; Deny exclusion group |
-| Restricted servers | `IpsecStudio-Restricted-<name>` → protected group | *Require/Require*; encrypted ESP only when encryption is required | Allow protected, access and management groups; Deny exclusion |
+| Restricted servers | `IpsecStudio-Restricted-<name>` → protected group | Inbound *Require*, outbound *Request*; encrypted ESP only when encryption is required | Allow protected, access and management groups; Deny exclusion |
 | No IPsec | none (Deny Apply everywhere) | — | — |
 | Boundary | `IpsecStudio-Boundary` → boundary group | *Request/Request* | none |
-| Quarantine | `IpsecStudio-Quarantine` → exclusion group | *Require/Require* | Allow management only |
+| Quarantine | `IpsecStudio-Quarantine` → exclusion group | Inbound *Require*, outbound *Request* | Allow management only |
 | Management (optional) | `IpsecStudio-Management` → management group | like the base | Allow base group (no Deny) |
 
 Every GPO also contains: an exemption rule (`InboundSecurity None / OutboundSecurity None`) for domain controllers and declared addresses; a main mode set (default AES-256/SHA-256/DH14); a quick mode set (ESP/null + ESP/AES-256; AES only for encrypted profiles); machine Kerberos authentication; ICMP exemption.
@@ -25,6 +25,8 @@ Every GPO also contains: an exemption rule (`InboundSecurity None / OutboundSecu
 
 1. **The most specific filter wins.** Exempt address (DC, printer, WSUS) → clear traffic under any profile.
 2. **Secure subnets.** Outside them no negotiation rule applies → clear.
+> **Outbound *Require* is not used by default.** In the lab, a rule with outbound *Require* on the secure subnet made Windows block all of the computer's traffic leaving it: internet, external DNS, updates and the Azure agent. *Require/Request* did not. Protection is decided on each responder's inbound side. The "Require IPsec on outbound too" option exists for restricted and quarantine, and the base "require" mode is still available; both raise an alert and are not recommended. Without outbound *Require*, a quarantined computer is still refused by protected hosts but reaches hosts without IPsec in clear.
+
 3. **Both sides' modes.** Initiator without IPsec against a *Require* responder → blocked; responder without IPsec against a *Request* initiator → clear fallback after 3 s; against a *Require* initiator → blocked.
 4. **Responder authorization.** If the responder's authorization list does not include (or denies) the initiating machine, negotiation fails and there is no fallback.
 5. **Encryption.** If one side only proposes encrypted ESP, the SA is encrypted; otherwise ESP/null (authentication and integrity).

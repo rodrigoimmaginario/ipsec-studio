@@ -8,7 +8,7 @@
 
 ## 02 · Profiles
 
-- **Authenticated base**: base group (default *Domain Computers*) and mode. *Inbound requires / outbound requests* is classic domain isolation; *require/require* removes any fallback; *request/request* is for preparation.
+- **Authenticated base**: base group (default *Domain Computers*) and mode. *Inbound requires / outbound requests* is classic domain isolation; *require/require* removes any fallback but cuts access outside the secure subnet (not recommended); *request/request* is for preparation.
 - **Restricted servers**: one or more profiles, each with a protected group, an optional access group (no group = any authenticated computer) and encryption.
 - **No IPsec**: a computer group that receives no policy and exempt addresses (IPv4 or CIDR) with reason and owner.
 - **Boundary**: a group that accepts clear inbound.

@@ -48,11 +48,13 @@ public class ScenarioTests {
         var snapshot = b.Apply(scenario.Membership);
         var waves = (scenario.Waves ?? []).Select(w => new Wave { Id = LabFixture.Id(), Name = w.Name, Members = w.Members.Select(m => new WaveMember { GroupId = b.Groups[m.Key].Id, ComputerIds = m.Value.Select(c => b.Hosts[c]).ToArray() }).ToArray() }).ToArray();
         var plan = b.F.Plan with { Waves = waves, Exemptions = scenario.Exemptions.Select(a => new ExemptAddress { Id = LabFixture.Id(), Name = "exempt " + a, Address = a, Reason = "scenario", Owner = "lab" }).ToArray() };
+        var wrong = new List<string>();
         void Check(InventorySnapshot s, string[][] expect, string stage) {
             var a = PlanRules.Assess(plan, s);
-            foreach (var e in expect) Assert.True(e[2] == Simulator.Evaluate(plan, s, a, b.Hosts[e[0]], b.Hosts[e[1]]).Outcome, $"{name}/{stage}: {e[0]} -> {e[1]} expected {e[2]}");
+            foreach (var e in expect) { var got = Simulator.Evaluate(plan, s, a, b.Hosts[e[0]], b.Hosts[e[1]]).Outcome; if (e[2] != got) wrong.Add($"{name}/{stage}: {e[0]} -> {e[1]} expected {e[2]}, simulated {got}"); }
         }
         Check(snapshot, scenario.Expect, "before waves");
         for (var i = 0; i < waves.Length; i++) Check(PlanRules.AfterWaves(plan, snapshot, i + 1), scenario.Waves![i].Expect, "after wave " + (i + 1));
+        Assert.True(wrong.Count == 0, string.Join("\n", wrong));
     }
 }

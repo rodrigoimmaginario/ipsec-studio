@@ -51,7 +51,7 @@
         [
           "db1",
           "ext1",
-          "blocked"
+          "clear"
         ],
         [
           "app1",
@@ -108,7 +108,7 @@
         [
           "client-no",
           "ext1",
-          "blocked"
+          "clear"
         ],
         [
           "app1",

@@ -16,7 +16,7 @@ IPsec Studio transforma o modelo clássico de *Server and Domain Isolation* (IPs
 | 2 | **Base autenticada** | Domínio isolado: entrada exige IPsec (Kerberos de máquina, ESP/null), saída solicita |
 | 3 | **Sem IPsec** | Computadores sem política e endereços isentos (impressoras, WSUS, firewalls) tratados em claro por todos |
 | 4 | **Fronteira** | Aceita entrada em claro de pares sem IPsec e negocia com os que souberem |
-| 5 | **Quarentena** | Exige IPsec nos dois sentidos e só autoriza o grupo de gestão; os demais recusam conexões vindas dela — basta adicionar a máquina ao grupo |
+| 5 | **Quarentena** | Exige IPsec na entrada e só autoriza o grupo de gestão; os demais recusam conexões vindas dela — basta adicionar a máquina ao grupo |
 
 Cada computador recebe exatamente **uma GPO de perfil**: filtragem por grupo de segurança com *Deny Apply* para os demais perfis. A autorização de máquinas fica na **lista de autorização IPsec de transporte** (Allow para o grupo de acesso, Deny para o grupo de exclusão), decidida por quem recebe a conexão.
 
