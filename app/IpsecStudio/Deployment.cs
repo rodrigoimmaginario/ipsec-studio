@@ -309,6 +309,7 @@ ConvertTo-Json @($results) -Compress -Depth 8
 """;
     const string NL = "\n";
     public static string RefreshScriptText => RefreshScript;
+    public static string ProbeScriptText => ProbeScript;
     // gpupdate changes the host's IPsec policy; a WinRM session that crosses that change stalls 60-90 s (lab, CV4.DS5). So:
     // 1) on each host, purge the machine tickets and start gpupdate + SA cleanup in a process of its own (not tied to the session);
     // 2) poll every host with fresh connections until it writes its completion marker. SAs with the Studio host are kept.
@@ -466,8 +467,10 @@ foreach($i in @($spec.initiators)){
         $client=New-Object System.Net.Sockets.TcpClient
         $tcp=$false
         try{$async=$client.BeginConnect($t.ip,[int]$t.port,$null,$null);if($async.AsyncWaitHandle.WaitOne(6000) -and $client.Connected){$tcp=$true;$client.EndConnect($async)}}catch{}finally{$client.Close()}
-        Start-Sleep -Milliseconds 300
-        $qm=@(Get-NetIPsecQuickModeSA -ErrorAction SilentlyContinue | Where-Object RemoteEndpoint -eq $t.ip | Select-Object -First 1)
+        # With outbound Request the first SYN goes out in clear while IKE negotiates; a responder that only requests IPsec accepts it,
+        # so TCP may complete before the SA. Wait up to 3 s (the Windows fallback window) before calling it clear (lab, CV4.DS5).
+        $qm=@()
+        for($w=0; $w -lt 12; $w++){ Start-Sleep -Milliseconds 250; $qm=@(Get-NetIPsecQuickModeSA -ErrorAction SilentlyContinue | Where-Object RemoteEndpoint -eq $t.ip | Select-Object -First 1); if($qm.Count -or -not $tcp){ break } }
         $mm=@(Get-NetIPsecMainModeSA -ErrorAction SilentlyContinue | Where-Object RemoteEndpoint -eq $t.ip | Select-Object -First 1)
         $r+=@{responder=$t.name;responderId=$t.computerId;tcp=$tcp;cipher=$(if($qm.Count){$qm[0].FirstCipherAlgorithm.ToString()}else{$null});integrity=$(if($qm.Count){$qm[0].FirstIntegrityAlgorithm.ToString()}else{$null});auth=$(if($mm.Count){$mm[0].LocalFirstId.AuthenticationMethod.ToString()}else{$null})}
       }

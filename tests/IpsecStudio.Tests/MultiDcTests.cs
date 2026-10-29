@@ -85,3 +85,13 @@ public class DetachedRefreshTests {
         Assert.DoesNotContain("Invoke-Command -ComputerName $h -ArgumentList (,@($studioIps)) -ScriptBlock {\n      param($studioIps)\n      klist.exe -li 0x3e7 purge | Out-Null\n      gpupdate.exe", s);
     }
 }
+
+public class ProbeTimingTests {
+    // Lab, CV4.DS5: admin1 -> wsus1 (boundary, inbound Request) was read as clear 300 ms after TCP completed; the SA came later.
+    [Fact]
+    public void Probe_waits_for_the_sa_before_calling_a_connection_clear() {
+        var s = Deployment.ProbeScriptText;
+        Assert.Contains("for($w=0; $w -lt 12; $w++){ Start-Sleep -Milliseconds 250;", s);
+        Assert.DoesNotContain("Start-Sleep -Milliseconds 300\n        $qm=", s);
+    }
+}
