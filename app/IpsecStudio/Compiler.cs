@@ -67,8 +67,8 @@ public static partial class Compiler {
         };
         var json = JsonSerializer.Serialize(spec, new JsonSerializerOptions(JsonSerializerDefaults.Web));
         if (json.Contains('\n') || json.Contains("'@")) throw new ValidationException(L.T("compile.spec"));
-        var apply = ApplyTemplate.Replace("__SPEC__", json);
-        var rollback = RollbackTemplate.Replace("__SPEC__", json);
+        var apply = ApplyTemplate.Replace("__PINPDC__", PinPdc).Replace("__SPEC__", json);
+        var rollback = RollbackTemplate.Replace("__PINPDC__", PinPdc).Replace("__SPEC__", json);
         var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(apply + "\n--\n" + rollback))).ToLowerInvariant();
         return new(plan.Id, plan.Version, snapshot.Id, snapshot.Domain, snapshot.DomainSid, marker, gpos.ToArray(), exempt, apply, rollback, hash) { Crypto = input.Settings.Crypto, ExemptIcmp = input.Settings.ExemptIcmp };
     }
@@ -86,7 +86,7 @@ public static partial class Compiler {
                 undo.Add($"if(Get-ADGroupMember -Identity '{gsid}' | Where-Object {{ $_.SID.Value -eq '{csid}' }}){{Remove-ADGroupMember -Identity '{gsid}' -Members '{csid}' -Confirm:$false; $changed++}}");
             }
         }
-        var head = MembershipPreamble.Replace("__DOMAINSID__", plan.Inventory.DomainSid).Replace("__MARKER__", $"IpsecStudio plan {plan.Id} v{plan.Version} wave {wave.Id}");
+        var head = MembershipPreamble.Replace("__PINPDC__", PinPdc).Replace("__DOMAINSID__", plan.Inventory.DomainSid).Replace("__MARKER__", $"IpsecStudio plan {plan.Id} v{plan.Version} wave {wave.Id}");
         var apply = head + NL + string.Join(NL, lines) + NL + "@{marker=$marker;changed=$changed}|ConvertTo-Json -Compress";
         var rollback = head + NL + string.Join(NL, undo) + NL + "@{marker=$marker;changed=$changed}|ConvertTo-Json -Compress";
         var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(apply + "\n--\n" + rollback))).ToLowerInvariant();
@@ -99,11 +99,19 @@ public static partial class Compiler {
         var container = plan.Input.Settings.GroupContainer ?? "CN=Users," + plan.Inventory.DomainDn;
         if (!PlanRules.ValidContainerDn(container)) throw new ValidationException(L.T("groups.container"));
         var lines = plan.Input.NewGroups.Select(g => $"if(-not (Get-ADGroup -Filter \"Name -eq '{g.Name}'\")){{New-ADGroup -Name '{g.Name}' -GroupScope Global -GroupCategory Security -Path '{container}' -Description '{g.Description}'; $changed++}}");
-        var head = MembershipPreamble.Replace("__DOMAINSID__", plan.Inventory.DomainSid).Replace("__MARKER__", $"IpsecStudio plan {plan.Id} v{plan.Version} groups");
+        var head = MembershipPreamble.Replace("__PINPDC__", PinPdc).Replace("__DOMAINSID__", plan.Inventory.DomainSid).Replace("__MARKER__", $"IpsecStudio plan {plan.Id} v{plan.Version} groups");
         var apply = head + NL + string.Join(NL, lines) + NL + "@{marker=$marker;changed=$changed}|ConvertTo-Json -Compress";
         var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(apply))).ToLowerInvariant();
         return new(plan.Input.NewGroups.Select(g => g.Name).ToArray(), container, apply, hash);
     }
+    // With several DCs every write and the reads that follow it must hit the same DC: New-GPO writes on the PDC emulator, so the
+    // AD and GroupPolicy cmdlets and the AD drive used for ACLs are pinned to it (lab, CV4.DS5: dc2 had not replicated the new GPO).
+    public const string PinPdc = """
+$pdc=$domain.PDCEmulator
+$PSDefaultParameterValues['*-AD*:Server']=$pdc
+$PSDefaultParameterValues['*-GP*:Server']=$pdc
+if(-not (Get-PSDrive IpsecPdc -ErrorAction SilentlyContinue)){ New-PSDrive -Name IpsecPdc -PSProvider ActiveDirectory -Root '//RootDSE/' -Server $pdc | Out-Null }
+""";
     const string MembershipPreamble = """
 $ErrorActionPreference='Stop'
 $ProgressPreference='SilentlyContinue'
@@ -111,6 +119,7 @@ $ProgressPreference='SilentlyContinue'
 Import-Module ActiveDirectory
 $domain=Get-ADDomain
 if($domain.DomainSID.Value -ne '__DOMAINSID__'){throw "Wrong domain: $($domain.DNSRoot)"}
+__PINPDC__
 $marker='__MARKER__'
 $changed=0
 """;
@@ -125,13 +134,14 @@ Import-Module GroupPolicy
 Import-Module ActiveDirectory
 $domain=Get-ADDomain
 if($domain.DNSRoot -ne $spec.domain -or $domain.DomainSID.Value -ne $spec.domainSid){throw "Wrong domain: $($domain.DNSRoot)"}
+__PINPDC__
 $target=if($spec.linkTarget -eq 'domain'){$domain.DistinguishedName}else{$spec.linkTarget}
 function Get-StudioGpo([string]$name){$g=Get-GPO -Name $name -ErrorAction SilentlyContinue;if($g -and $g.Description -ne $spec.marker){throw "GPO $name exists but belongs to another revision: $($g.Description)"};return $g}
 """;
     const string NL = "\n";
     const string ApplyTemplate = Preamble + NL + """
 function Deny-Apply([guid]$id,[string]$sid){
-  $path='AD:\CN='+$id.ToString('B').ToUpper()+',CN=Policies,CN=System,'+$domain.DistinguishedName
+  $path='IpsecPdc:\CN='+$id.ToString('B').ToUpper()+',CN=Policies,CN=System,'+$domain.DistinguishedName
   $acl=Get-Acl -Path $path
   $rule=New-Object System.DirectoryServices.ActiveDirectoryAccessRule([System.Security.Principal.SecurityIdentifier]$sid,[System.DirectoryServices.ActiveDirectoryRights]::ExtendedRight,[System.Security.AccessControl.AccessControlType]::Deny,[guid]'edacfd8f-ffb3-11d1-b41d-00a0c968f939')
   $acl.AddAccessRule($rule)
@@ -147,19 +157,22 @@ try{
     Set-GPPermission -Guid $gpo.Id -TargetName 'Authenticated Users' -TargetType Group -PermissionLevel GpoRead -Replace | Out-Null
     Set-GPPermission -Guid $gpo.Id -TargetName $g.applyGroup -TargetType Group -PermissionLevel GpoApply | Out-Null
     foreach($sid in @($g.denyGroupSids)){Deny-Apply $gpo.Id $sid}
+    # IPsec settings go into the GPO through a session opened on the PDC, where New-GPO created it (no replication wait).
+    $gs=Open-NetGPO -PolicyStore $store -DomainController $pdc
     $mm=New-NetIPsecMainModeCryptoProposal -Encryption $spec.crypto.mainModeEncryption -Hash $spec.crypto.mainModeHash -KeyExchange $spec.crypto.keyExchange
-    New-NetIPsecMainModeCryptoSet -PolicyStore $store -DisplayName 'IpsecStudio main mode' -Name 'IpsecStudio-MM' -Proposal $mm -MaxMinutes $spec.crypto.mainModeLifetimeMinutes -Default | Out-Null
+    New-NetIPsecMainModeCryptoSet -GPOSession $gs -DisplayName 'IpsecStudio main mode' -Name 'IpsecStudio-MM' -Proposal $mm -MaxMinutes $spec.crypto.mainModeLifetimeMinutes -Default | Out-Null
     $auth=New-NetIPsecAuthProposal -Machine -Kerberos
-    New-NetIPsecPhase1AuthSet -PolicyStore $store -DisplayName 'IpsecStudio Kerberos machine' -Name 'IpsecStudio-P1' -Proposal $auth | Out-Null
+    New-NetIPsecPhase1AuthSet -GPOSession $gs -DisplayName 'IpsecStudio Kerberos machine' -Name 'IpsecStudio-P1' -Proposal $auth | Out-Null
     $enc=New-NetIPsecQuickModeCryptoProposal -Encapsulation ESP -Encryption $spec.crypto.quickModeEncryption -ESPHash $spec.crypto.quickModeIntegrity -MaxMinutes $spec.crypto.quickModeLifetimeMinutes
     $plain=New-NetIPsecQuickModeCryptoProposal -Encapsulation ESP -Encryption None -ESPHash $spec.crypto.quickModeIntegrity -MaxMinutes $spec.crypto.quickModeLifetimeMinutes
     $proposals=if($g.encryption){@($enc)}else{@($plain,$enc)}
-    New-NetIPsecQuickModeCryptoSet -PolicyStore $store -DisplayName 'IpsecStudio quick mode' -Name 'IpsecStudio-QM' -Proposal $proposals | Out-Null
-    if(@($spec.exemptAddresses).Count -gt 0){New-NetIPsecRule -PolicyStore $store -DisplayName 'IpsecStudio exempt peers' -IPsecRuleName 'IpsecStudio-Exempt' -Mode Transport -Protocol Any -RemoteAddress @($spec.exemptAddresses) -InboundSecurity None -OutboundSecurity None | Out-Null}
+    New-NetIPsecQuickModeCryptoSet -GPOSession $gs -DisplayName 'IpsecStudio quick mode' -Name 'IpsecStudio-QM' -Proposal $proposals | Out-Null
+    if(@($spec.exemptAddresses).Count -gt 0){New-NetIPsecRule -GPOSession $gs -DisplayName 'IpsecStudio exempt peers' -IPsecRuleName 'IpsecStudio-Exempt' -Mode Transport -Protocol Any -RemoteAddress @($spec.exemptAddresses) -InboundSecurity None -OutboundSecurity None | Out-Null}
     $remote=if(@($spec.secureSubnets).Count -gt 0){@($spec.secureSubnets)}else{'Any'}
-    New-NetIPsecRule -PolicyStore $store -DisplayName ('IpsecStudio '+$g.profile) -IPsecRuleName 'IpsecStudio-Main' -Mode Transport -Protocol Any -RemoteAddress $remote -InboundSecurity $g.inbound -OutboundSecurity $g.outbound -Phase1AuthSet 'IpsecStudio-P1' -QuickModeCryptoSet 'IpsecStudio-QM' -RequireAuthorization ([bool]$g.requireAuthorization) | Out-Null
-    if($g.authorizationSddl){Set-NetFirewallSetting -PolicyStore $store -RemoteMachineTransportAuthorizationList $g.authorizationSddl}
-    if($spec.exemptIcmp){Set-NetFirewallSetting -PolicyStore $store -Exemptions Icmp}
+    New-NetIPsecRule -GPOSession $gs -DisplayName ('IpsecStudio '+$g.profile) -IPsecRuleName 'IpsecStudio-Main' -Mode Transport -Protocol Any -RemoteAddress $remote -InboundSecurity $g.inbound -OutboundSecurity $g.outbound -Phase1AuthSet 'IpsecStudio-P1' -QuickModeCryptoSet 'IpsecStudio-QM' -RequireAuthorization ([bool]$g.requireAuthorization) | Out-Null
+    if($g.authorizationSddl){Set-NetFirewallSetting -GPOSession $gs -RemoteMachineTransportAuthorizationList $g.authorizationSddl}
+    if($spec.exemptIcmp){Set-NetFirewallSetting -GPOSession $gs -Exemptions Icmp}
+    Save-NetGPO -GPOSession $gs
   }
   foreach($g in $spec.gpos){New-GPLink -Name $g.name -Target $target -LinkEnabled Yes | Out-Null}
   $links=@((Get-GPInheritance -Target $target).GpoLinks | Where-Object {$_.DisplayName -in @($spec.gpos.name)} | Select-Object DisplayName,Enabled,Order)

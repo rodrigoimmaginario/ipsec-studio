@@ -87,7 +87,7 @@ public sealed class Deployment(IConfiguration config, PlanRepository repository,
     async Task<DriftReport> ReadDrift(SavedPlan plan, bool beforeApply) {
         var c = Compiler.Compile(plan);
         var spec = new { domain = plan.Inventory.Domain, target = plan.Input.Settings.LinkTarget == "domain" ? plan.Inventory.DomainDn : plan.Input.Settings.LinkTarget, gpos = c.Gpos.Select(g => g.Name) };
-        var (ok, output) = await runner.Run(DriftScript.Replace("__DRIFT__", JsonSerializer.Serialize(spec)), TimeSpan.FromMinutes(5));
+        var (ok, output) = await runner.Run(DriftScript.Replace("__PINPDC__", Compiler.PinPdc).Replace("__DRIFT__", JsonSerializer.Serialize(spec)), TimeSpan.FromMinutes(5));
         if (!ok) throw new InvalidOperationException(L.T("deploy.remoteFailed", output));
         var reading = IpsecStudio.Drift.Parse(output);
         var report = IpsecStudio.Drift.Compare(c, reading);
@@ -246,6 +246,7 @@ __DRIFT__
 Import-Module GroupPolicy; Import-Module ActiveDirectory
 $domain=Get-ADDomain
 if($domain.DNSRoot -ne $spec.domain){throw "Wrong domain: $($domain.DNSRoot)"}
+__PINPDC__
 $apply=[guid]'edacfd8f-ffb3-11d1-b41d-00a0c968f939'
 $links=@{}
 foreach($l in (Get-GPInheritance -Target $spec.target).GpoLinks){ $links[$l.DisplayName]=[bool]$l.Enabled }
@@ -254,18 +255,19 @@ foreach($name in @($spec.gpos)){
   $g=Get-GPO -Name $name -ErrorAction SilentlyContinue
   if(-not $g){ $gpos+=@{name=$name;exists=$false;marker=$null;version=0;linked=$false;rules=@();authorizationSddl='';exemptions='';applyGroups=@();denySids=@()}; continue }
   $store=$spec.domain+'\'+$name
+  $gs=Open-NetGPO -PolicyStore $store -DomainController $pdc
   $errors=@(); $rules=@(); $setting=$null
-  try{ $rules=@(Get-NetIPsecRule -PolicyStore $store -ErrorAction Stop | ForEach-Object { $af=$_|Get-NetFirewallAddressFilter -ErrorAction Stop; @{name=$_.IPsecRuleName;inbound=$_.InboundSecurity.ToString();outbound=$_.OutboundSecurity.ToString();requireAuthorization=[bool]$_.RequireAuthorization;remoteAddress=(@($af.RemoteAddress) -join ',')} }) }catch{ $errors+="rules: $($_.Exception.Message)" }
-  try{ $setting=Get-NetFirewallSetting -PolicyStore $store -ErrorAction Stop }catch{ $errors+="setting: $($_.Exception.Message)" }
+  try{ $rules=@(Get-NetIPsecRule -GPOSession $gs -ErrorAction Stop | ForEach-Object { $af=$_|Get-NetFirewallAddressFilter -ErrorAction Stop; @{name=$_.IPsecRuleName;inbound=$_.InboundSecurity.ToString();outbound=$_.OutboundSecurity.ToString();requireAuthorization=[bool]$_.RequireAuthorization;remoteAddress=(@($af.RemoteAddress) -join ',')} }) }catch{ $errors+="rules: $($_.Exception.Message)" }
+  try{ $setting=Get-NetFirewallSetting -GPOSession $gs -ErrorAction Stop }catch{ $errors+="setting: $($_.Exception.Message)" }
   $crypto=$null
   try{
-    $mmSets=@(Get-NetIPsecMainModeCryptoSet -PolicyStore $store -ErrorAction Stop)
-    $qmSets=@(Get-NetIPsecQuickModeCryptoSet -PolicyStore $store -ErrorAction Stop)
-    $p1Sets=@(Get-NetIPsecPhase1AuthSet -PolicyStore $store -ErrorAction Stop)
+    $mmSets=@(Get-NetIPsecMainModeCryptoSet -GPOSession $gs -ErrorAction Stop)
+    $qmSets=@(Get-NetIPsecQuickModeCryptoSet -GPOSession $gs -ErrorAction Stop)
+    $p1Sets=@(Get-NetIPsecPhase1AuthSet -GPOSession $gs -ErrorAction Stop)
     $crypto=@{mainMode=@($mmSets | ForEach-Object { $_.Proposal } | ForEach-Object { "$($_.Encryption)-$($_.Hash)-$($_.KeyExchange)" });mainModeMinutes=$(if($mmSets.Count){[int]$mmSets[0].MaxMinutes}else{0});quickMode=@($qmSets | ForEach-Object { $_.Proposal } | ForEach-Object { "$($_.Encapsulation)-$($_.Encryption)-$($_.ESPHash)-$($_.MaxMinutes)" });phase1=@($p1Sets | ForEach-Object { $_.Proposal } | ForEach-Object { "$($_.AuthenticationMethod)" })}
   }catch{ $errors+="crypto: $($_.Exception.Message)" }
   $perm=@(Get-GPPermission -Guid $g.Id -All | Where-Object { $_.Permission -eq 'GpoApply' } | ForEach-Object { $_.Trustee.Name })
-  $acl=Get-Acl -Path ('AD:\'+$g.Path)
+  $acl=Get-Acl -Path ('IpsecPdc:\'+$g.Path)
   $deny=@($acl.Access | Where-Object { $_.AccessControlType -eq 'Deny' -and $_.ObjectType -eq $apply } | ForEach-Object { $_.IdentityReference.Translate([Security.Principal.SecurityIdentifier]).Value })
   $gpos+=@{name=$name;exists=$true;marker=$g.Description;version=[int]$g.Computer.DSVersion;linked=[bool]$links[$name];rules=$rules;authorizationSddl=[string]$setting.RemoteMachineTransportAuthorizationList;exemptions=[string]$setting.Exemptions;applyGroups=$perm;denySids=$deny;errors=$errors;crypto=$crypto}
 }
