@@ -87,3 +87,26 @@ public class WireTests : IDisposable {
         public Task<(bool Ok, string Output)> Run(string script, TimeSpan timeout) { Scripts.Add(script); return Task.FromResult(Reply(script)); }
     }
 }
+
+public class RequestBindingTests {
+    // The API binds requests with the same options; the lab regression posts these exact shapes.
+    [Theory]
+    [InlineData("{\"planId\":\"p\",\"version\":1,\"action\":\"refresh\"}", false)]
+    [InlineData("{\"planId\":\"p\",\"version\":1,\"action\":\"probe\",\"capture\":true}", true)]
+    [InlineData("{\"planId\":\"p\",\"version\":1,\"action\":\"probe\",\"computerIds\":[\"a\"],\"capture\":false}", false)]
+    public void HostRequest_binds_with_or_without_capture(string json, bool capture) {
+        var api = new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web) { UnmappedMemberHandling = System.Text.Json.Serialization.JsonUnmappedMemberHandling.Disallow };
+        var r = System.Text.Json.JsonSerializer.Deserialize<HostRequest>(json, api)!;
+        Assert.Equal("p", r.PlanId); Assert.Equal(capture, r.Capture);
+    }
+}
+
+public class ScriptRunnerTests {
+    [Fact]
+    public void Warnings_and_information_are_kept_out_of_the_json_output() {
+        var p = PowerShellRunner.Prepare("ConvertTo-Json @(1)");
+        Assert.StartsWith("$WarningPreference='SilentlyContinue'", p);
+        Assert.Contains("$InformationPreference='SilentlyContinue'", p);
+        Assert.EndsWith("ConvertTo-Json @(1)", p);
+    }
+}

@@ -8,9 +8,12 @@ public interface IScriptRunner {
     Task<(bool Ok, string Output)> Run(string script, TimeSpan timeout);
 }
 public sealed class PowerShellRunner(ILogger<PowerShellRunner> logger) : IScriptRunner {
+    // powershell.exe -File writes warnings and information (e.g. WinRM "connection interrupted... restored") to stdout,
+    // which corrupts the JSON the scripts return. Errors still go to stderr.
+    public static string Prepare(string script) => "$WarningPreference='SilentlyContinue'; $InformationPreference='SilentlyContinue'; $ProgressPreference='SilentlyContinue'\n" + script;
     public async Task<(bool Ok, string Output)> Run(string script, TimeSpan timeout) {
         var file = Path.Combine(Path.GetTempPath(), "ipsec-studio-" + Guid.NewGuid().ToString("N") + ".ps1");
-        await File.WriteAllTextAsync(file, script, new UTF8Encoding(true));
+        await File.WriteAllTextAsync(file, Prepare(script), new UTF8Encoding(true));
         try {
             var start = new ProcessStartInfo {
                 FileName = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), @"WindowsPowerShell\v1.0\powershell.exe"),
