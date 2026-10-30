@@ -471,6 +471,13 @@ foreach($i in @($spec.initiators)){
         # so TCP may complete before the SA. Wait up to 3 s (the Windows fallback window) before calling it clear (lab, CV4.DS5).
         $qm=@()
         for($w=0; $w -lt 12; $w++){ Start-Sleep -Milliseconds 250; $qm=@(Get-NetIPsecQuickModeSA -ErrorAction SilentlyContinue | Where-Object RemoteEndpoint -eq $t.ip | Select-Object -First 1); if($qm.Count -or -not $tcp){ break } }
+        # Clear only if a second connection also gets no SA (right after a rollout one attempt was seen without SA, then fine).
+        if($tcp -and -not $qm.Count){
+          Start-Sleep -Seconds 2
+          $client=New-Object System.Net.Sockets.TcpClient
+          try{$async=$client.BeginConnect($t.ip,[int]$t.port,$null,$null);[void]$async.AsyncWaitHandle.WaitOne(6000)}catch{}finally{$client.Close()}
+          for($w=0; $w -lt 12; $w++){ Start-Sleep -Milliseconds 250; $qm=@(Get-NetIPsecQuickModeSA -ErrorAction SilentlyContinue | Where-Object RemoteEndpoint -eq $t.ip | Select-Object -First 1); if($qm.Count){ break } }
+        }
         $mm=@(Get-NetIPsecMainModeSA -ErrorAction SilentlyContinue | Where-Object RemoteEndpoint -eq $t.ip | Select-Object -First 1)
         $r+=@{responder=$t.name;responderId=$t.computerId;tcp=$tcp;cipher=$(if($qm.Count){$qm[0].FirstCipherAlgorithm.ToString()}else{$null});integrity=$(if($qm.Count){$qm[0].FirstIntegrityAlgorithm.ToString()}else{$null});auth=$(if($mm.Count){$mm[0].LocalFirstId.AuthenticationMethod.ToString()}else{$null})}
       }

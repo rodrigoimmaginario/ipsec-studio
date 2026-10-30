@@ -92,6 +92,7 @@ public class ProbeTimingTests {
     public void Probe_waits_for_the_sa_before_calling_a_connection_clear() {
         var s = Deployment.ProbeScriptText;
         Assert.Contains("for($w=0; $w -lt 12; $w++){ Start-Sleep -Milliseconds 250;", s);
+        Assert.Contains("if($tcp -and -not $qm.Count){", s); // a second attempt before calling it clear
         Assert.DoesNotContain("Start-Sleep -Milliseconds 300\n        $qm=", s);
     }
 }
