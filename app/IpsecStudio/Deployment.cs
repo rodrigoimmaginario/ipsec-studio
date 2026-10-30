@@ -45,8 +45,8 @@ public sealed class Deployment(IConfiguration config, PlanRepository repository,
     // After apply the Studio host is refreshed first (it needs the new policy to reach hosts that already require IPsec);
     // after rollback it goes last (it keeps the policy the others still require until they are refreshed).
     static string[] StudioIps() => System.Net.Dns.GetHostAddresses(Environment.MachineName).Where(ip => ip.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork).Select(ip => ip.ToString()).ToArray();
-    // Hosts are refreshed/verified one after another (gpupdate /wait:120 each): 1.5 minutes per host, never under 6.
-    public static TimeSpan HostsTimeout(int hosts) => TimeSpan.FromMinutes(Math.Max(6, Math.Ceiling(1.5 * hosts)));
+    // Hosts are refreshed/verified one after another (detached gpupdate, up to 5 min with a DC down): 2.5 minutes per host, never under 6.
+    public static TimeSpan HostsTimeout(int hosts) => TimeSpan.FromMinutes(Math.Max(6, Math.Ceiling(2.5 * hosts)));
     public static IEnumerable<T> OrderStudio<T>(IEnumerable<T> hosts, Func<T, string> name, string machine, bool last) =>
         hosts.OrderBy(h => name(h).Equals(machine, StringComparison.OrdinalIgnoreCase) == last ? 1 : 0);
     public async Task<DeploymentRecord> Execute(DeployRequest request, string identity) {
@@ -187,7 +187,8 @@ public sealed class Deployment(IConfiguration config, PlanRepository repository,
     }
     async Task<ProbeResult[]> RunProbe(SavedPlan plan, InventorySnapshot membership, string[]? computerIds, string identity, bool capture = false) {
         var a = PlanRules.Assess(plan.Input, membership);
-        var initiators = TargetHosts(plan, computerIds);
+        // The Studio host probes first: later probes keep their SAs with it (its WinRM session), which would leave asymmetric state.
+        var initiators = OrderStudio(TargetHosts(plan, computerIds), h => h.Name, Environment.MachineName, last: false).ToArray();
         var responders = a.Hosts.Where(h => h.Profile != "dc" && h.Ip is not null).Select(h => new { h.ComputerId, h.Name, Ip = h.Ip!, Port = ProbePort })
             .Concat(plan.Input.ExternalHosts.Select(x => new { ComputerId = x.Id, x.Name, Ip = x.Address, Port = ProbePort })).ToArray();
         var studioIps = StudioIps();
@@ -310,6 +311,8 @@ ConvertTo-Json @($results) -Compress -Depth 8
     const string NL = "\n";
     public static string RefreshScriptText => RefreshScript;
     public static string ProbeScriptText => ProbeScript;
+    public static string CaptureStartScriptText => CaptureStartScript;
+    public static string CaptureStopScriptText => CaptureStopScript;
     // gpupdate changes the host's IPsec policy; a WinRM session that crosses that change stalls 60-90 s (lab, CV4.DS5). So:
     // 1) on each host, purge the machine tickets and start gpupdate + SA cleanup in a process of its own (not tied to the session);
     // 2) poll every host with fresh connections until it writes its completion marker. SAs with the Studio host are kept.
@@ -346,7 +349,7 @@ foreach($h in @($hosts)){
    }catch{ $last=$_.Exception.Message; Start-Sleep -Seconds 5 }
   }
   if(-not $started){ $results+=@{host=$h;reachable=$false;output=$last}; continue }
-  $deadline=(Get-Date).AddSeconds(150); $done=$null
+  $deadline=(Get-Date).AddSeconds(300); $done=$null
   while(-not $done -and (Get-Date) -lt $deadline){
     try{
       $done=Invoke-Command -ComputerName $h -ArgumentList $token -ScriptBlock {
@@ -384,20 +387,22 @@ $ErrorActionPreference='Stop'
 $hosts=ConvertFrom-Json @'
 __HOSTS__
 '@
-$results=@()
-foreach($h in @($hosts)){
-  try{
-    [void](Invoke-Command -ComputerName $h.fqdn -ScriptBlock {
+# All hosts at once (Invoke-Command fans out): one slow host must not delay the others (lab, CV4.DS5: 7 hosts in sequence timed out).
+$errs=$null
+$started=@{}
+foreach($o in @(Invoke-Command -ComputerName @($hosts | ForEach-Object { $_.fqdn }) -ErrorAction SilentlyContinue -ErrorVariable errs -ScriptBlock {
       $dir='C:\ProgramData\IpsecStudio\capture'; New-Item -ItemType Directory -Path $dir -Force | Out-Null
       $status=(netsh.exe trace show status) -join ' '
       if($status -notmatch 'no trace session'){ throw "another trace session is running" }
       Remove-Item (Join-Path $dir 'probe.*') -Force -ErrorAction SilentlyContinue
       $out=netsh.exe trace start capture=yes report=no persistent=no maxsize=128 overwrite=yes tracefile=(Join-Path $dir 'probe.etl')
       if($LASTEXITCODE -ne 0){ throw "netsh trace start failed: $($out -join ' ')" }
-    })
-    $results+=@{host=$h.name;ok=$true;error=$null;bytes=0;sha256=$null;buckets=@()}
-  }catch{ $results+=@{host=$h.name;ok=$false;error=$_.Exception.Message;bytes=0;sha256=$null;buckets=@()} }
-}
+      'started'
+    })){ $started[[string]$o.PSComputerName]=$true }
+$results=@(foreach($h in @($hosts)){
+  if($started[$h.fqdn]){ @{host=$h.name;ok=$true;error=$null;bytes=0;sha256=$null;buckets=@()} }
+  else{ $e=@($errs | Where-Object { "$($_.OriginInfo.PSComputerName)" -eq $h.fqdn -or "$($_.TargetObject)" -eq $h.fqdn } | ForEach-Object { $_.Exception.Message } | Select-Object -First 1); @{host=$h.name;ok=$false;error="$e";bytes=0;sha256=$null;buckets=@()} }
+})
 ConvertTo-Json @($results) -Compress -Depth 4
 """;
     // Stops the capture, decodes it with pktmon, buckets IPv4 packets (source, destination, port, esp/tcp) and deletes the files.
@@ -407,10 +412,9 @@ $ErrorActionPreference='Stop'
 $spec=ConvertFrom-Json @'
 __SPEC__
 '@
-$results=@()
-foreach($h in @($spec.hosts)){
-  try{
-    $r=Invoke-Command -ComputerName $h.fqdn -ScriptBlock {
+$errs=$null
+$byHost=@{}
+foreach($r in @(Invoke-Command -ComputerName @($spec.hosts | ForEach-Object { $_.fqdn }) -ErrorAction SilentlyContinue -ErrorVariable errs -ScriptBlock {
       $dir='C:\ProgramData\IpsecStudio\capture'; $etl=Join-Path $dir 'probe.etl'; $txt=Join-Path $dir 'probe.txt'
       try{
         netsh.exe trace stop | Out-Null
@@ -440,10 +444,12 @@ foreach($h in @($spec.hosts)){
         @{ok=$true;error=$null;bytes=$bytes;sha256=$sha;buckets=$buckets}
       }catch{ @{ok=$false;error=$_.Exception.Message;bytes=0;sha256=$null;buckets=@()} }
       finally{ Remove-Item $etl,$txt -Force -ErrorAction SilentlyContinue; Remove-Item (Join-Path $dir 'probe*.cab') -Force -ErrorAction SilentlyContinue }
-    }
-    $results+=@{host=$h.name;ok=[bool]$r.ok;error=$r.error;bytes=[long]$r.bytes;sha256=$r.sha256;buckets=@($r.buckets)}
-  }catch{ $results+=@{host=$h.name;ok=$false;error=$_.Exception.Message;bytes=0;sha256=$null;buckets=@()} }
-}
+    })){ $byHost[[string]$r.PSComputerName]=$r }
+$results=@(foreach($h in @($spec.hosts)){
+  $r=$byHost[$h.fqdn]
+  if($r){ @{host=$h.name;ok=[bool]$r.ok;error=$r.error;bytes=[long]$r.bytes;sha256=$r.sha256;buckets=@($r.buckets)} }
+  else{ $e=@($errs | Where-Object { "$($_.OriginInfo.PSComputerName)" -eq $h.fqdn -or "$($_.TargetObject)" -eq $h.fqdn } | ForEach-Object { $_.Exception.Message } | Select-Object -First 1); @{host=$h.name;ok=$false;error="$e";bytes=0;sha256=$null;buckets=@()} }
+})
 ConvertTo-Json @($results) -Compress -Depth 6
 """;
     const string ProbeScript = """

@@ -61,8 +61,8 @@ public class RefreshTests : IDisposable {
 
     [Theory]
     [InlineData(1, 6)]
-    [InlineData(5, 8)]
-    [InlineData(8, 12)]
+    [InlineData(5, 13)]
+    [InlineData(8, 20)]
     public void Host_timeout_grows_with_the_number_of_hosts(int hosts, int minutes) => Assert.Equal(TimeSpan.FromMinutes(minutes), Deployment.HostsTimeout(hosts));
 
     sealed class Runner : IScriptRunner {
@@ -111,5 +111,14 @@ public class ReplicationWaitTests {
             Assert.Contains("$g.Computer.DSVersion -eq $g.Computer.SysvolVersion", s);
             Assert.Contains("replication=", s);
         }
+    }
+}
+
+public class ParallelCaptureTests {
+    // Lab, CV4.DS5: stopping/decoding 7 captures one after another exceeded the 10-minute limit; all hosts are handled at once.
+    [Fact]
+    public void Capture_start_and_stop_fan_out_to_all_hosts() {
+        Assert.Contains("Invoke-Command -ComputerName @($hosts | ForEach-Object { $_.fqdn })", Deployment.CaptureStartScriptText);
+        Assert.Contains("Invoke-Command -ComputerName @($spec.hosts | ForEach-Object { $_.fqdn })", Deployment.CaptureStopScriptText);
     }
 }
