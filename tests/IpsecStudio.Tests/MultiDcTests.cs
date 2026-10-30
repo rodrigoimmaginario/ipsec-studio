@@ -122,3 +122,21 @@ public class ParallelCaptureTests {
         Assert.Contains("Invoke-Command -ComputerName @($spec.hosts | ForEach-Object { $_.fqdn })", Deployment.CaptureStopScriptText);
     }
 }
+
+// Lab, CV4.DS5: a wave added app1 to the SQL clients on the PDC; app1's renewed machine ticket came from dc2 before the change
+// replicated, so db1 refused it although the identity looked "synced". Waves wait until every reachable DC shows the membership.
+public class WaveReplicationTests {
+    readonly LabFixture f = new();
+    static readonly string WaveId = LabFixture.Id();
+    [Fact]
+    public void Wave_scripts_wait_for_the_membership_on_every_reachable_dc() {
+        var plan = f.Plan with { Waves = [new Wave { Id = WaveId, Name = "Piloto", Members = [new WaveMember { GroupId = f.SqlClients.Id, ComputerIds = [f.ClientNo.Id] }] }] };
+        var w = Compiler.CompileWave(f.Saved(plan), WaveId);
+        Assert.Contains($"@{{g='{f.SqlClients.Sid}';c='{f.ClientNo.Sid}';present=$true}}", w.ApplyScript);
+        Assert.Contains($"@{{g='{f.SqlClients.Sid}';c='{f.ClientNo.Sid}';present=$false}}", w.RollbackScript);
+        foreach (var s in new[] { w.ApplyScript, w.RollbackScript }) {
+            Assert.Contains("Get-ADGroupMember -Identity $e.g -Server $dc", s);
+            Assert.Contains("replication=$repl", s);
+        }
+    }
+}

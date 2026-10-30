@@ -87,8 +87,10 @@ public static partial class Compiler {
             }
         }
         var head = MembershipPreamble.Replace("__PINPDC__", PinPdc).Replace("__DOMAINSID__", plan.Inventory.DomainSid).Replace("__MARKER__", $"IpsecStudio plan {plan.Id} v{plan.Version} wave {wave.Id}");
-        var apply = head + NL + string.Join(NL, lines) + NL + "@{marker=$marker;changed=$changed}|ConvertTo-Json -Compress";
-        var rollback = head + NL + string.Join(NL, undo) + NL + "@{marker=$marker;changed=$changed}|ConvertTo-Json -Compress";
+        // Hosts renew their machine ticket from any DC: wait until every reachable DC shows the membership change (SIDs only).
+        string Expect(bool present) => "$expect=@(" + string.Join(",", wave.Members.SelectMany(m => m.ComputerIds.Select(c => $"@{{g='{map[m.GroupId].Sid}';c='{map[c].Sid}';present=${(present ? "true" : "false")}}}"))) + ")";
+        var apply = head + NL + string.Join(NL, lines) + NL + Expect(true) + NL + WaitMembership + NL + "@{marker=$marker;changed=$changed;replication=$repl}|ConvertTo-Json -Compress";
+        var rollback = head + NL + string.Join(NL, undo) + NL + Expect(false) + NL + WaitMembership + NL + "@{marker=$marker;changed=$changed;replication=$repl}|ConvertTo-Json -Compress";
         var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(apply + "\n--\n" + rollback))).ToLowerInvariant();
         return new(wave.Id, wave.Name, computers.Distinct().ToArray(), apply, rollback, hash);
     }
@@ -111,6 +113,19 @@ $pdc=$domain.PDCEmulator
 $PSDefaultParameterValues['*-AD*:Server']=$pdc
 $PSDefaultParameterValues['*-GP*:Server']=$pdc
 if(-not (Get-PSDrive IpsecPdc -ErrorAction SilentlyContinue)){ New-PSDrive -Name IpsecPdc -PSProvider ActiveDirectory -Root '//RootDSE/' -Server $pdc | Out-Null }
+""";
+    const string WaitMembership = """
+$deadline=(Get-Date).AddSeconds(180); $repl=[ordered]@{}
+foreach($dc in @(Get-ADDomainController -Filter * | ForEach-Object { $_.HostName })){
+  if(-not (Test-NetConnection $dc -Port 389 -InformationLevel Quiet -WarningAction SilentlyContinue)){ $repl[$dc]='unreachable'; continue }
+  $ok=$false
+  while(-not $ok -and (Get-Date) -lt $deadline){
+    $ok=$true
+    foreach($e in $expect){ $m=[bool](Get-ADGroupMember -Identity $e.g -Server $dc | Where-Object { $_.SID.Value -eq $e.c }); if($m -ne $e.present){ $ok=$false } }
+    if(-not $ok){ Start-Sleep -Seconds 5 }
+  }
+  $repl[$dc]=if($ok){'ok'}else{'timeout'}
+}
 """;
     const string MembershipPreamble = """
 $ErrorActionPreference='Stop'
