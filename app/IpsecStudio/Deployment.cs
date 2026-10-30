@@ -104,7 +104,7 @@ public sealed class Deployment(IConfiguration config, PlanRepository repository,
         var relevant = beforeApply ? report.Gpos.Where(g => g.Exists).Select(g => g with { Differences = g.Differences.Length == 0 ? [L.T("drift.present")] : g.Differences }).ToArray()
                                    : report.Gpos.Where(g => g.Exists).ToArray();
         var absent = report.Gpos.Where(g => !g.Exists).Select(g => g with { Differences = beforeApply ? [] : g.Differences }).ToArray();
-        var dirty = relevant.Any(g => g.Differences.Length > 0) || reading.External.Length > 0;
+        var dirty = relevant.Any(g => g.Differences.Length > 0) || reading.External.Any(IpsecStudio.Drift.Blocks);
         return report with { Gpos = [.. relevant, .. absent], Clean = !dirty };
     }
     static string Describe(DriftReport r) => string.Join(" | ", r.Gpos.Where(g => g.Differences.Length > 0).Select(g => g.Name + ": " + string.Join("; ", g.Differences)).Concat(r.External.Select(e => L.T("drift.external", e.Name, e.RuleCount))));

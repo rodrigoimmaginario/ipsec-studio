@@ -77,3 +77,14 @@ public class DebtPaymentTests : IDisposable {
         public Task<(bool Ok, string Output)> Run(string script, TimeSpan timeout) => Task.FromResult(Reply(script));
     }
 }
+
+public class UnlinkedExternalTests {
+    // CV4.DS7 measurement: an unlinked GPO with IPsec rules reaches no computer; it is listed but does not block apply/rollback.
+    [Fact]
+    public void Unlinked_external_gpos_are_listed_without_blocking() {
+        var unlinked = new DriftExternalReading("Lab-Bulk-Ipsec-001", 1, []);
+        var linked = new DriftExternalReading("Corp-Legacy", 1, ["DC=lab,DC=ipsec,DC=test"]) { Computers = ["db1"] };
+        Assert.False(Drift.Blocks(unlinked));
+        Assert.True(Drift.Blocks(linked));
+    }
+}

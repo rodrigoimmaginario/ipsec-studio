@@ -65,7 +65,7 @@ public static class Drift {
             if (!icmp.Equals(c.ExemptIcmp ? "Icmp" : "", StringComparison.OrdinalIgnoreCase)) diff.Add(L.T("drift.field", g.Name, "ICMP", c.ExemptIcmp ? "Icmp" : "-", icmp == "" ? "-" : icmp));
             gpos.Add(new(g.Name, true, diff.ToArray()));
         }
-        var clean = gpos.All(x => x.Exists && x.Differences.Length == 0) && reading.External.Length == 0;
+        var clean = gpos.All(x => x.Exists && x.Differences.Length == 0) && !reading.External.Any(Blocks);
         return new(clean, gpos.ToArray(), reading.External, DateTimeOffset.UtcNow) { Scan = reading.Scan };
     }
     // What the compiler writes into each GPO, in the format Windows returns (confirmed on the lab DC).
@@ -76,5 +76,7 @@ public static class Drift {
         return new([$"{k.MainModeEncryption}-{k.MainModeHash}-{k.KeyExchange}"], k.MainModeLifetimeMinutes, g.Encryption ? [enc] : [plain, enc], ["MachineKerb"]);
     }
     static string Normalize(string? value) => value is null || value.Equals("NotConfigured", StringComparison.OrdinalIgnoreCase) ? "" : value.Trim();
+    // Only GPOs with an enabled link can affect computers; unlinked ones are listed without blocking (CV4.DS7).
+    public static bool Blocks(DriftExternalReading e) => (e.Links ?? []).Length > 0;
     public static DriftReading Parse(string json) { var r = JsonSerializer.Deserialize<DriftReading>(json, Json.Settings) ?? new([], []); return r with { Gpos = r.Gpos ?? [], External = (r.External ?? []).Select(e => e with { Links = e.Links ?? [], Computers = e.Computers ?? [] }).ToArray() }; }
 }
