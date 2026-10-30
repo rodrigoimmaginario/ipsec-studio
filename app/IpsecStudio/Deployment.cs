@@ -344,7 +344,7 @@ ConvertTo-Json @($results) -Compress -Depth 8
     public static string CaptureStartScriptText => CaptureStartScript;
     public static string CaptureStopScriptText => CaptureStopScript;
     // gpupdate changes the host's IPsec policy; a WinRM session that crosses that change stalls 60-90 s (lab, CV4.DS5). So:
-    // 1) on each host, purge the machine tickets and start gpupdate + SA cleanup in a process of its own (not tied to the session);
+    // 1) on each host, purge the machine tickets and start gpupdate + SA cleanup as a temporary SYSTEM scheduled task;
     // 2) poll every host with fresh connections until it writes its completion marker. SAs with the Studio host are kept.
     const string RefreshScript = """
 $ErrorActionPreference='Stop'
@@ -356,42 +356,54 @@ $studioIps=ConvertFrom-Json @'
 __STUDIOIPS__
 '@
 $token=[guid]::NewGuid().ToString('N')
+# Starts the refresh on the host as a temporary SYSTEM scheduled task: it does not depend on this WinRM session (a WMI-created
+# process sometimes never ran, lab CV4.DS7). The task runs gpupdate, clears SAs except the Studio host's and writes a marker.
+$launch={
+  param($token,$studioIps)
+  klist.exe -li 0x3e7 purge | Out-Null
+  $dir='C:\ProgramData\IpsecStudio'; New-Item -ItemType Directory -Path $dir -Force | Out-Null
+  Get-ScheduledTask -TaskName 'IpsecStudio-Refresh-*' -ErrorAction SilentlyContinue | Unregister-ScheduledTask -Confirm:$false -ErrorAction SilentlyContinue
+  $keep=(@($studioIps) | ForEach-Object { "'" + $_ + "'" }) -join ','
+  $cmd='gpupdate.exe /target:computer /force /wait:120 | Out-Null; $x=$LASTEXITCODE; ' +
+       'Get-NetIPsecMainModeSA -ErrorAction SilentlyContinue | Where-Object {$_.RemoteEndpoint -notin @(' + $keep + ')} | Remove-NetIPsecMainModeSA -ErrorAction SilentlyContinue; ' +
+       'Get-NetIPsecQuickModeSA -ErrorAction SilentlyContinue | Where-Object {$_.RemoteEndpoint -notin @(' + $keep + ')} | Remove-NetIPsecQuickModeSA -ErrorAction SilentlyContinue; ' +
+       "Set-Content -Path '$dir\refresh-$token.done' -Value `$x"
+  $enc=[Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($cmd))
+  $task="IpsecStudio-Refresh-$token"
+  $action=New-ScheduledTaskAction -Execute 'powershell.exe' -Argument "-NoProfile -NonInteractive -EncodedCommand $enc"
+  Register-ScheduledTask -TaskName $task -Action $action -User 'SYSTEM' -RunLevel Highest -Force | Out-Null
+  Start-ScheduledTask -TaskName $task
+}
+$poll={
+  param($token)
+  $f="C:\ProgramData\IpsecStudio\refresh-$token.done"
+  if(Test-Path $f){
+    $x=(Get-Content $f -Raw).Trim(); Remove-Item $f -Force
+    Unregister-ScheduledTask -TaskName "IpsecStudio-Refresh-$token" -Confirm:$false -ErrorAction SilentlyContinue
+    @{computer=$env:COMPUTERNAME;refreshedUtc=(Get-Date).ToUniversalTime().ToString('o');gpupdateExit=[int]$x}
+  } else { $null }
+}
 $results=@()
-# One host at a time (Studio host first after apply, last after rollback): start the detached refresh, then wait for its marker.
+# One host at a time (Studio host first after apply, last after rollback): start, then wait for the marker with fresh connections.
 foreach($h in @($hosts)){
-  $started=$false; $last=''
-  for($attempt=1; $attempt -le 4 -and -not $started; $attempt++){
-   try{
-    Invoke-Command -ComputerName $h -ArgumentList $token,(,@($studioIps)) -ScriptBlock {
-      param($token,$studioIps)
-      klist.exe -li 0x3e7 purge | Out-Null
-      $dir='C:\ProgramData\IpsecStudio'; New-Item -ItemType Directory -Path $dir -Force | Out-Null
-      $keep=(@($studioIps) | ForEach-Object { "'" + $_ + "'" }) -join ','
-      $cmd='gpupdate.exe /target:computer /force /wait:120 | Out-Null; $x=$LASTEXITCODE; ' +
-           'Get-NetIPsecMainModeSA -ErrorAction SilentlyContinue | Where-Object {$_.RemoteEndpoint -notin @(' + $keep + ')} | Remove-NetIPsecMainModeSA -ErrorAction SilentlyContinue; ' +
-           'Get-NetIPsecQuickModeSA -ErrorAction SilentlyContinue | Where-Object {$_.RemoteEndpoint -notin @(' + $keep + ')} | Remove-NetIPsecQuickModeSA -ErrorAction SilentlyContinue; ' +
-           "Set-Content -Path '$dir\refresh-$token.done' -Value `$x"
-      $enc=[Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($cmd))
-      $p=Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{CommandLine="powershell.exe -NoProfile -NonInteractive -EncodedCommand $enc"}
-      if($p.ReturnValue -ne 0){ throw "Win32_Process.Create returned $($p.ReturnValue)" }
+  $done=$null; $last=''; $relaunched=$false
+  foreach($round in 1,2){
+    $started=$false
+    for($attempt=1; $attempt -le 4 -and -not $started; $attempt++){
+      try{ Invoke-Command -ComputerName $h -ArgumentList $token,(,@($studioIps)) -ScriptBlock $launch; $started=$true }
+      catch{ $last=$_.Exception.Message; Start-Sleep -Seconds 5 }
     }
-    $started=$true
-   }catch{ $last=$_.Exception.Message; Start-Sleep -Seconds 5 }
-  }
-  if(-not $started){ $results+=@{host=$h;reachable=$false;output=$last}; continue }
-  $deadline=(Get-Date).AddSeconds(300); $done=$null
-  while(-not $done -and (Get-Date) -lt $deadline){
-    try{
-      $done=Invoke-Command -ComputerName $h -ArgumentList $token -ScriptBlock {
-        param($token)
-        $f="C:\ProgramData\IpsecStudio\refresh-$token.done"
-        if(Test-Path $f){ $x=(Get-Content $f -Raw).Trim(); Remove-Item $f -Force; @{computer=$env:COMPUTERNAME;refreshedUtc=(Get-Date).ToUniversalTime().ToString('o');gpupdateExit=[int]$x} } else { $null }
-      }
-    }catch{ $last=$_.Exception.Message }
-    if(-not $done){ Start-Sleep -Seconds 5 }
+    if(-not $started){ break }
+    $deadline=(Get-Date).AddSeconds(300)
+    while(-not $done -and (Get-Date) -lt $deadline){
+      try{ $done=Invoke-Command -ComputerName $h -ArgumentList $token -ScriptBlock $poll }catch{ $last=$_.Exception.Message }
+      if(-not $done){ Start-Sleep -Seconds 5 }
+    }
+    if($done){ break }
+    $relaunched=$true
   }
   if($done){ $results+=@{host=$h;reachable=$true;output=($done|ConvertTo-Json -Compress)} }
-  else{ $results+=@{host=$h;reachable=$false;output="refresh did not report completion in time. $last"} }
+  else{ $results+=@{host=$h;reachable=$false;output="refresh did not report completion in time (relaunched=$relaunched). $last"} }
 }
 ConvertTo-Json @($results) -Compress -Depth 6
 """;

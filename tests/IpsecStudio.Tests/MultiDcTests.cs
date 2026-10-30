@@ -78,7 +78,11 @@ public class DetachedRefreshTests {
     [Fact]
     public void Refresh_launches_gpupdate_detached_and_waits_for_a_completion_marker() {
         var s = Deployment.RefreshScriptText;
-        Assert.Contains("Invoke-CimMethod -ClassName Win32_Process -MethodName Create", s);
+        // A WMI-created process sometimes never ran (lab, CV4.DS7: fs1 had no Group Policy activity): a SYSTEM scheduled task instead.
+        Assert.Contains("Register-ScheduledTask -TaskName $task -Action $action -User 'SYSTEM' -RunLevel Highest -Force", s);
+        Assert.Contains("Unregister-ScheduledTask -TaskName \"IpsecStudio-Refresh-$token\"", s); // removed once the marker is read
+        Assert.Contains("$relaunched", s); // one relaunch when the marker does not show up in time
+        Assert.DoesNotContain("Win32_Process", s);
         Assert.Contains("-EncodedCommand", s);
         Assert.Contains("refresh-$token.done", s);
         Assert.Contains("Test-Path", s);
