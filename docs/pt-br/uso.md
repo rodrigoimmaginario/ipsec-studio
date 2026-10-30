@@ -28,7 +28,9 @@ A matriz mostra, para cada par iniciador → destino, o resultado previsto. Cliq
 3. **Aplicar GPOs** executa o script com a sua identidade. Qualquer GPO `IpsecStudio-*` pré-existente bloqueia a aplicação: reverta antes.
 4. **Atualizar política nos hosts**: purge do ticket de máquina, `gpupdate` e limpeza de SAs via WinRM.
 5. **Verificar política efetiva**: regras IPsec ativas (com status), GPO de origem e lista de autorização em cada host. Uma regra com status diferente de OK significa que o host está sem proteção.
-6. **Sondar tráfego**: de cada host do domínio para todos os destinos, conexão TCP e SA de quick mode, comparadas à simulação (esperado × observado).
+6. **Sondar tráfego**: de cada host do domínio para todos os destinos, conexão TCP e SA de quick mode, comparadas à simulação (esperado × observado). Depois de aplicar, espere cerca de 2 minutos antes de sondar. Um par que caiu para claro durante a implantação pode continuar em claro por alguns minutos com um host de fronteira, que só *solicita* IPsec. A simulação descreve o estado estável.
+
+**Vários DCs.** Aplicar, reverter e as ondas gravam no DC emulador PDC e só terminam quando todos os DCs alcançáveis refletem a mudança (até 3 minutos). Assim, nenhum host atualiza a partir de um DC defasado. Com um DC desligado, atualizar, verificar e sondar continuam funcionando pelos demais, desde que os membros usem mais de um DC como DNS. Criar e remover GPOs exige o PDC.
 7. **Reverter** remove apenas as GPOs criadas por esta versão (marcadas com o identificador do plano).
 
 O registro de execuções guarda cada ação, identidade, versão e saída.

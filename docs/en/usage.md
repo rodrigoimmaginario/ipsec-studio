@@ -28,7 +28,9 @@ The matrix shows, for each initiator → responder pair, the predicted outcome. 
 3. **Apply GPOs** runs the script with your identity. Any pre-existing `IpsecStudio-*` GPO blocks the apply: roll back first.
 4. **Refresh policy on hosts**: machine ticket purge, `gpupdate` and SA cleanup over WinRM.
 5. **Verify effective policy**: active IPsec rules (with status), source GPO and authorization list on each host. A rule with a status other than OK means the host is unprotected.
-6. **Probe traffic**: from every domain host to every responder, TCP connection and quick mode SA, compared with the simulation (expected × observed).
+6. **Probe traffic**: from every domain host to every responder, TCP connection and quick mode SA, compared with the simulation (expected × observed). After applying, wait about 2 minutes before probing. A pair that fell back to clear during the rollout may stay clear for a few minutes with a boundary host, which only *requests* IPsec. The simulation describes the steady state.
+
+**Several DCs.** Apply, rollback and waves write on the PDC emulator DC and finish only when every reachable DC reflects the change (up to 3 minutes). So no host refreshes from a lagging DC. With one DC down, refresh, verify and probe keep working through the others, provided members use more than one DC as DNS. Creating and removing GPOs needs the PDC.
 7. **Roll back** removes only the GPOs created by this version (marked with the plan identifier).
 
 The execution log keeps each action, identity, version and output.
