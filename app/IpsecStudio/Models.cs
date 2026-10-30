@@ -47,6 +47,8 @@ public sealed record PlanSettings {
     public bool ExemptIcmp { get; init; } = true;
     // Outbound Require for restricted and quarantine. Off by default: in the lab it cut all traffic leaving the secure subnet.
     public bool RequireOutbound { get; init; }
+    // After apply/rollback/waves the Studio waits this long for every reachable DC to show the change (0-3600 s).
+    public int ReplicationWaitSeconds { get; init; } = 180;
     // "domain" or the DN of an OU where the GPOs are linked.
     public string LinkTarget { get; init; } = "domain";
     public CryptoSettings Crypto { get; init; } = new();

@@ -10,10 +10,16 @@ public sealed record DriftGpoReading(string Name, bool Exists, string? Marker, i
 }
 // Proposals as "Encryption-Hash-KeyExchange" (main mode) and "Encapsulation-Encryption-ESPHash-MaxMinutes" (quick mode), in preference order.
 public sealed record DriftCryptoReading(string[] MainMode, int MainModeMinutes, string[] QuickMode, string[] Phase1);
-public sealed record DriftExternalReading(string Name, int RuleCount, string[] Links);
-public sealed record DriftReading(DriftGpoReading[] Gpos, DriftExternalReading[] External);
+public sealed record DriftExternalReading(string Name, int RuleCount, string[] Links) {
+    // Computers under the containers where the GPO is linked and enabled (block-inheritance, enforcement and security filtering not evaluated).
+    public string[] Computers { get; init; } = [];
+    public string[] InPlan { get; init; } = [];
+}
+// How the search went: GPOs in the domain, GPOs opened, and whether the firewall-extension filter could be trusted.
+public sealed record DriftScan(int Total, int Opened, bool Filtered);
+public sealed record DriftReading(DriftGpoReading[] Gpos, DriftExternalReading[] External) { public DriftScan? Scan { get; init; } }
 public sealed record DriftGpoReport(string Name, bool Exists, string[] Differences);
-public sealed record DriftReport(bool Clean, DriftGpoReport[] Gpos, DriftExternalReading[] External, DateTimeOffset Utc);
+public sealed record DriftReport(bool Clean, DriftGpoReport[] Gpos, DriftExternalReading[] External, DateTimeOffset Utc) { public DriftScan? Scan { get; init; } }
 
 public static class Drift {
     // Compares the compiled intent with the directory reading. Any difference or any external IPsec GPO makes the report dirty.
@@ -60,7 +66,7 @@ public static class Drift {
             gpos.Add(new(g.Name, true, diff.ToArray()));
         }
         var clean = gpos.All(x => x.Exists && x.Differences.Length == 0) && reading.External.Length == 0;
-        return new(clean, gpos.ToArray(), reading.External, DateTimeOffset.UtcNow);
+        return new(clean, gpos.ToArray(), reading.External, DateTimeOffset.UtcNow) { Scan = reading.Scan };
     }
     // What the compiler writes into each GPO, in the format Windows returns (confirmed on the lab DC).
     public static DriftCryptoReading ExpectedCrypto(Compilation c, GpoSpec g) {
@@ -70,5 +76,5 @@ public static class Drift {
         return new([$"{k.MainModeEncryption}-{k.MainModeHash}-{k.KeyExchange}"], k.MainModeLifetimeMinutes, g.Encryption ? [enc] : [plain, enc], ["MachineKerb"]);
     }
     static string Normalize(string? value) => value is null || value.Equals("NotConfigured", StringComparison.OrdinalIgnoreCase) ? "" : value.Trim();
-    public static DriftReading Parse(string json) { var r = JsonSerializer.Deserialize<DriftReading>(json, Json.Settings) ?? new([], []); return r with { Gpos = r.Gpos ?? [], External = r.External ?? [] }; }
+    public static DriftReading Parse(string json) { var r = JsonSerializer.Deserialize<DriftReading>(json, Json.Settings) ?? new([], []); return r with { Gpos = r.Gpos ?? [], External = (r.External ?? []).Select(e => e with { Links = e.Links ?? [], Computers = e.Computers ?? [] }).ToArray() }; }
 }

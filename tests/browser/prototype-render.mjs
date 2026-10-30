@@ -46,6 +46,11 @@ vm.runInContext("state.probe = [{ initiator: 'app1', responder: 'db1', expected:
 assert.ok(main.innerHTML.includes('No fio') && main.innerHTML.includes('ESP 12 · aceito em claro 0 · tentativas em claro 1') && main.innerHTML.includes('confere') && main.innerHTML.includes('id="capture"'), 'probe wire column and capture option');
 vm.runInContext("state.assessment = { ...state.assessment, warnings: ['ALERTA — saída \\'Require\\' em: Banco de dados.'] }; state.page = 'deploy'; render()", context);
 assert.ok(main.innerHTML.includes('id="outbound-alert"') && main.innerHTML.includes('ALERTA'), 'outbound alert shown on the deploy page');
+vm.runInContext("state.page = 'deploy'; state.settleUntil = Date.now() + 60000; state.pendingDcs = ['dc2.lab.ipsec.test']; state.drift = { clean: false, gpos: [], external: [{ name: 'Corp-Legacy', ruleCount: 1, links: ['DC=lab'], computers: ['db1', 'x'], inPlan: ['db1'] }], utc: '' }; render()", context);
+assert.ok(main.innerHTML.includes('id="settle-note"') && main.innerHTML.includes('Sondar em') && main.innerHTML.includes('data-action="probe-now"'), 'settle countdown before probing');
+assert.ok(main.innerHTML.includes('id="pending-dcs"') && main.innerHTML.includes('dc2.lab.ipsec.test'), 'pending DCs notice');
+assert.ok(main.innerHTML.includes('atinge 2 computador(es)') && main.innerHTML.includes('no plano: db1'), 'reach of other IPsec GPOs');
+vm.runInContext("state.settleUntil = 0; state.pendingDcs = []; state.drift = null; render()", context);
 assert.ok(main.innerHTML.includes('identidade pendente') && main.innerHTML.includes('data-action="renew-host"'), 'identity badge and per-host renew');
 assert.ok(main.innerHTML.includes('id="approval"') && main.innerHTML.includes('Aplicar onda') && main.innerHTML.includes('Preparar grupos no AD') && main.innerHTML.includes('não aplicada'), 'approval note, wave actions and group preparation');
 // language switch: English strings, persisted choice, pt-BR default restored

@@ -62,7 +62,7 @@ public static partial class Compiler {
         var spec = new {
             domain = snapshot.Domain, domainSid = snapshot.DomainSid, marker, linkTarget = input.Settings.LinkTarget,
             secureSubnets = input.Settings.SecureSubnets, exemptAddresses = exempt, exemptIcmp = input.Settings.ExemptIcmp,
-            crypto = input.Settings.Crypto,
+            crypto = input.Settings.Crypto, replicationWaitSeconds = input.Settings.ReplicationWaitSeconds,
             gpos = gpos.Select(g => new { g.Name, g.Profile, g.ApplyGroup, g.DenyGroupSids, g.Inbound, g.Outbound, g.Encryption, g.RequireAuthorization, g.AuthorizationSddl })
         };
         var json = JsonSerializer.Serialize(spec, new JsonSerializerOptions(JsonSerializerDefaults.Web));
@@ -89,8 +89,8 @@ public static partial class Compiler {
         var head = MembershipPreamble.Replace("__PINPDC__", PinPdc).Replace("__DOMAINSID__", plan.Inventory.DomainSid).Replace("__MARKER__", $"IpsecStudio plan {plan.Id} v{plan.Version} wave {wave.Id}");
         // Hosts renew their machine ticket from any DC: wait until every reachable DC shows the membership change (SIDs only).
         string Expect(bool present) => "$expect=@(" + string.Join(",", wave.Members.SelectMany(m => m.ComputerIds.Select(c => $"@{{g='{map[m.GroupId].Sid}';c='{map[c].Sid}';present=${(present ? "true" : "false")}}}"))) + ")";
-        var apply = head + NL + string.Join(NL, lines) + NL + Expect(true) + NL + WaitMembership + NL + "@{marker=$marker;changed=$changed;replication=$repl}|ConvertTo-Json -Compress";
-        var rollback = head + NL + string.Join(NL, undo) + NL + Expect(false) + NL + WaitMembership + NL + "@{marker=$marker;changed=$changed;replication=$repl}|ConvertTo-Json -Compress";
+        var apply = head + NL + string.Join(NL, lines) + NL + Expect(true) + NL + WaitMembership.Replace("__REPLWAIT__", plan.Input.Settings.ReplicationWaitSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture)) + NL + "@{marker=$marker;changed=$changed;replication=$repl}|ConvertTo-Json -Compress";
+        var rollback = head + NL + string.Join(NL, undo) + NL + Expect(false) + NL + WaitMembership.Replace("__REPLWAIT__", plan.Input.Settings.ReplicationWaitSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture)) + NL + "@{marker=$marker;changed=$changed;replication=$repl}|ConvertTo-Json -Compress";
         var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(apply + "\n--\n" + rollback))).ToLowerInvariant();
         return new(wave.Id, wave.Name, computers.Distinct().ToArray(), apply, rollback, hash);
     }
@@ -115,7 +115,7 @@ $PSDefaultParameterValues['*-GP*:Server']=$pdc
 if(-not (Get-PSDrive IpsecPdc -ErrorAction SilentlyContinue)){ New-PSDrive -Name IpsecPdc -PSProvider ActiveDirectory -Root '//RootDSE/' -Server $pdc | Out-Null }
 """;
     const string WaitMembership = """
-$deadline=(Get-Date).AddSeconds(180); $repl=[ordered]@{}
+$deadline=(Get-Date).AddSeconds(__REPLWAIT__); $repl=[ordered]@{}
 foreach($dc in @(Get-ADDomainController -Filter * | ForEach-Object { $_.HostName })){
   if(-not (Test-NetConnection $dc -Port 389 -InformationLevel Quiet -WarningAction SilentlyContinue)){ $repl[$dc]='unreachable'; continue }
   $ok=$false
@@ -155,7 +155,7 @@ function Get-StudioGpo([string]$name){$g=Get-GPO -Name $name -ErrorAction Silent
 # Hosts refresh from any DC: wait (max 180 s) until every reachable DC shows the Studio GPOs present with AD = SYSVOL version
 # (after apply) or absent (after rollback). Unreachable DCs are reported, not waited for.
 function Wait-StudioReplication([bool]$Present){
-  $deadline=(Get-Date).AddSeconds(180); $state=[ordered]@{}
+  $deadline=(Get-Date).AddSeconds([int]$spec.replicationWaitSeconds); $state=[ordered]@{}
   foreach($dc in @(Get-ADDomainController -Filter * | ForEach-Object { $_.HostName })){
     if(-not (Test-NetConnection $dc -Port 389 -InformationLevel Quiet -WarningAction SilentlyContinue)){ $state[$dc]='unreachable'; continue }
     $ok=$false

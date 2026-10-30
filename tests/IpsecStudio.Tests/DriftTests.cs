@@ -95,7 +95,7 @@ public class DriftTests : IDisposable {
         var saved = await repo.Save(null, f.Plan, f.Snapshot, PlanRules.Assess(f.Plan, f.Snapshot), "t");
         var c = Compiler.Compile(saved);
         var dirty = JsonSerializer.Serialize(new { gpos = Array.Empty<object>(), external = new[] { new { name = "Corp-Legacy-IPsec", ruleCount = 1, links = new[] { "DC=lab,DC=ipsec,DC=test" } } } }, Json.Settings);
-        var runner = new FakeRunner { Reply = s => s.Contains("@{gpos=$gpos;external=$external}") ? (true, dirty) : (true, "{}") };
+        var runner = new FakeRunner { Reply = s => s.Contains("@{gpos=$gpos;external=$external") ? (true, dirty) : (true, "{}") };
         var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?> { ["Deployment:Enabled"] = "true" }).Build();
         var d = new Deployment(config, repo, runner, NullLogger<Deployment>.Instance);
         var report = await d.Drift(saved.Id, 1);
@@ -107,7 +107,7 @@ public class DriftTests : IDisposable {
         var log = await repo.ListDeployments(saved.Id);
         Assert.Contains(log, e => e.Action == "drift-acknowledged" && e.Output.Contains("Corp-Legacy-IPsec"));
         Assert.Contains(runner.Scripts, s => s.Contains("New-GPO"));
-        runner.Reply = s => s.Contains("@{gpos=$gpos;external=$external}") ? (true, JsonSerializer.Serialize(new { gpos = c.Gpos.Select(g => new { name = g.Name, exists = true, marker = c.Marker, version = 1, linked = true, rules = new[] { new { name = "IpsecStudio-Exempt", inbound = "None", outbound = "None", requireAuthorization = false, remoteAddress = "10.74.1.10" }, new { name = "IpsecStudio-Main", inbound = g.Inbound, outbound = g.Outbound, requireAuthorization = g.RequireAuthorization, remoteAddress = "10.74.1.0/24" } }, authorizationSddl = g.AuthorizationSddl ?? "", exemptions = "Icmp", applyGroups = new[] { g.ApplyGroup }, denySids = g.DenyGroupSids, crypto = Drift.ExpectedCrypto(c, g) }), external = Array.Empty<object>() }, Json.Settings)) : (true, "{}");
+        runner.Reply = s => s.Contains("@{gpos=$gpos;external=$external") ? (true, JsonSerializer.Serialize(new { gpos = c.Gpos.Select(g => new { name = g.Name, exists = true, marker = c.Marker, version = 1, linked = true, rules = new[] { new { name = "IpsecStudio-Exempt", inbound = "None", outbound = "None", requireAuthorization = false, remoteAddress = "10.74.1.10" }, new { name = "IpsecStudio-Main", inbound = g.Inbound, outbound = g.Outbound, requireAuthorization = g.RequireAuthorization, remoteAddress = "10.74.1.0/24" } }, authorizationSddl = g.AuthorizationSddl ?? "", exemptions = "Icmp", applyGroups = new[] { g.ApplyGroup }, denySids = g.DenyGroupSids, crypto = Drift.ExpectedCrypto(c, g) }), external = Array.Empty<object>() }, Json.Settings)) : (true, "{}");
         var clean = await d.Drift(saved.Id, 1);
         Assert.True(clean.Clean);
         var rb = await d.Execute(new(saved.Id, 1, c.Sha256, "rollback", ""), "op");

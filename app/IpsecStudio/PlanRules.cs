@@ -80,6 +80,7 @@ public static partial class PlanRules {
         var c = input.Settings.Crypto;
         Require(c.MainModeEncryption is "AES128" or "AES192" or "AES256" && c.MainModeHash is "SHA256" or "SHA384" && c.KeyExchange is "DH14" or "DH19" or "DH20" or "DH24", L.T("crypto.mm"));
         Require(c.QuickModeEncryption is "AES128" or "AES192" or "AES256" or "AESGCM128" or "AESGCM256" && c.QuickModeIntegrity is "SHA256" or "AESGMAC256", L.T("crypto.qm"));
+        Require(input.Settings.ReplicationWaitSeconds is >= 0 and <= 3600, L.T("replication.wait"));
         Require(c.MainModeLifetimeMinutes is >= 1 and <= 2879 && c.QuickModeLifetimeMinutes is >= 5 and <= 2879, L.T("crypto.lifetime"));
 
         var baseGroup = input.BaseGroupId is null ? DomainComputers(snapshot) : Group(input.BaseGroupId, L.T("label.base"));

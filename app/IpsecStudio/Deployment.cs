@@ -17,8 +17,12 @@ public sealed record DeploymentRecord(DateTimeOffset Utc, string Identity, strin
     public string? Approval { get; init; }
     public string? WaveId { get; init; }
     public bool? ExpansionAllowed { get; init; }
+    // DCs that did not confirm the change within the replication wait ("timeout"/"unreachable"): hosts using them may keep old policy.
+    public string[] PendingDcs { get; init; } = [];
 }
-public sealed record WaveResult(string WaveId, string WaveName, bool Succeeded, bool ExpansionAllowed, string Output, HostResult[] Verify, ProbeResult[] Probe);
+public sealed record WaveResult(string WaveId, string WaveName, bool Succeeded, bool ExpansionAllowed, string Output, HostResult[] Verify, ProbeResult[] Probe) {
+    public string[] PendingDcs { get; init; } = [];
+}
 public sealed record HostResult(string Host, bool Reachable, string Output) {
     // Identity propagation: the machine TGT (logon session 0x3e7) carries the groups IPsec peers will see.
     public string IdentityState { get; init; } = "unknown";
@@ -70,7 +74,7 @@ public sealed class Deployment(IConfiguration config, PlanRepository repository,
                 }
             }
             var (ok, output) = await runner.Run(script, TimeSpan.FromMinutes(10));
-            var record = new DeploymentRecord(DateTimeOffset.UtcNow, identity, plan.Id, plan.Version, hash, request.Action, ok, output) { Approval = request.Approval?.Trim() };
+            var record = new DeploymentRecord(DateTimeOffset.UtcNow, identity, plan.Id, plan.Version, hash, request.Action, ok, output) { Approval = request.Approval?.Trim(), PendingDcs = ok ? PendingDcs(output) : [] };
             await repository.AppendDeployment(record);
             // Hosts keep a removed GPO until their next refresh; refresh them now (failures are recorded, the rollback stands).
             if (ok && request.Action == "rollback") {
@@ -93,6 +97,8 @@ public sealed class Deployment(IConfiguration config, PlanRepository repository,
         var (ok, output) = await runner.Run(DriftScript.Replace("__PINPDC__", Compiler.PinPdc).Replace("__DRIFT__", JsonSerializer.Serialize(spec)), TimeSpan.FromMinutes(5));
         if (!ok) throw new InvalidOperationException(L.T("deploy.remoteFailed", output));
         var reading = IpsecStudio.Drift.Parse(output);
+        var planHosts = PlanRules.Assess(plan.Input, plan.Inventory).Hosts.Where(h => h.Profile != "dc").Select(h => h.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        reading = reading with { External = reading.External.Select(e => e with { InPlan = e.Computers.Where(planHosts.Contains).ToArray() }).ToArray() };
         var report = IpsecStudio.Drift.Compare(c, reading);
         // Before apply, Studio GPOs must be absent (present ones are drift); before rollback, absent ones are simply nothing to remove.
         var relevant = beforeApply ? report.Gpos.Where(g => g.Exists).Select(g => g with { Differences = g.Differences.Length == 0 ? [L.T("drift.present")] : g.Differences }).ToArray()
@@ -132,7 +138,7 @@ public sealed class Deployment(IConfiguration config, PlanRepository repository,
                 expansion = verify.All(h => h.Reachable && IsHealthy(h.Output)) && probe.All(p => p.Match);
             }
             await repository.AppendDeployment(new(DateTimeOffset.UtcNow, identity, plan.Id, plan.Version, wave.Sha256, request.Action, ok, output) { Approval = request.Approval?.Trim(), WaveId = wave.WaveId, ExpansionAllowed = apply ? expansion : null });
-            return new(wave.WaveId, wave.Name, ok, apply && expansion, output, verify, probe);
+            return new(wave.WaveId, wave.Name, ok, apply && expansion, output, verify, probe) { PendingDcs = ok ? PendingDcs(output) : [] };
         } finally { gate.Release(); }
     }
     static bool IsHealthy(string output) { try { using var doc = JsonDocument.Parse(output); return doc.RootElement.TryGetProperty("healthy", out var h) && h.GetBoolean(); } catch { return false; } }
@@ -276,12 +282,27 @@ foreach($name in @($spec.gpos)){
   $deny=@($acl.Access | Where-Object { $_.AccessControlType -eq 'Deny' -and $_.ObjectType -eq $apply } | ForEach-Object { $_.IdentityReference.Translate([Security.Principal.SecurityIdentifier]).Value })
   $gpos+=@{name=$name;exists=$true;marker=$g.Description;version=[int]$g.Computer.DSVersion;linked=[bool]$links[$name];rules=$rules;authorizationSddl=[string]$setting.RemoteMachineTransportAuthorizationList;exemptions=[string]$setting.Exemptions;applyGroups=$perm;denySids=$deny;errors=$errors;crypto=$crypto}
 }
+# Other GPOs with connection security rules. Rules written by the NetSecurity cmdlets or the firewall snap-in register the
+# Windows Firewall extension in gPCMachineExtensionNames (lab, CV4.DS7), so one LDAP query selects the candidates; only those are opened.
+# If the Studio's own GPOs exist without that extension the attribute is not trusted here and every GPO is opened.
+$fwExt='{B05566AC-FE9C-4368-BE01-7A4CBB6CBA11}'
+$base=$domain.DistinguishedName
+$all=@(Get-ADObject -LDAPFilter '(objectClass=groupPolicyContainer)' -SearchBase "CN=Policies,CN=System,$base" -Properties displayName,gPCMachineExtensionNames)
+$ours=@($all | Where-Object { $_.displayName -in @($spec.gpos) })
+$filtered=($ours.Count -eq 0) -or (@($ours | Where-Object { "$($_.gPCMachineExtensionNames)" -like "*$fwExt*" }).Count -gt 0)
+$candidates=@($all | Where-Object { $_.displayName -notin @($spec.gpos) -and (-not $filtered -or "$($_.gPCMachineExtensionNames)" -like "*$fwExt*") })
 $external=@()
-foreach($g in (Get-GPO -All | Where-Object { $_.DisplayName -notin @($spec.gpos) })){
-  $n=@(Get-NetIPsecRule -PolicyStore ($spec.domain+'\'+$g.DisplayName) -ErrorAction Stop).Count
-  if($n -gt 0){ $report=[xml](Get-GPOReport -Guid $g.Id -ReportType Xml); $external+=@{name=$g.DisplayName;ruleCount=$n;links=@($report.GPO.LinksTo | ForEach-Object { $_.SOMPath })} }
+foreach($c in $candidates){
+  $n=@(Get-NetIPsecRule -PolicyStore ($spec.domain+'\'+$c.displayName) -ErrorAction Stop).Count
+  if($n -gt 0){
+    $guid=$c.Name
+    $pattern='\[LDAP://cn='+[regex]::Escape($guid)+',[^;\]]*;(\d)\]'
+    $links=@(Get-ADObject -LDAPFilter "(gPLink=*$guid*)" -SearchBase $base -Properties gPLink | Where-Object { $m=[regex]::Match([string]$_.gPLink,$pattern,'IgnoreCase'); $m.Success -and (([int]$m.Groups[1].Value) -band 1) -eq 0 } | ForEach-Object { $_.DistinguishedName })
+    $computers=@($links | ForEach-Object { Get-ADComputer -SearchBase $_ -SearchScope Subtree -Filter * | ForEach-Object { $_.Name } } | Sort-Object -Unique)
+    $external+=@{name=$c.displayName;ruleCount=$n;links=$links;computers=@($computers | Select-Object -First 500)}
+  }
 }
-@{gpos=$gpos;external=$external} | ConvertTo-Json -Compress -Depth 6
+@{gpos=$gpos;external=$external;scan=@{total=$all.Count;opened=$candidates.Count;filtered=$filtered}} | ConvertTo-Json -Compress -Depth 6
 """;
     const string RemotePreamble = """
 $ErrorActionPreference='Stop'
@@ -310,6 +331,15 @@ ConvertTo-Json @($results) -Compress -Depth 8
 """;
     const string NL = "\n";
     public static string RefreshScriptText => RefreshScript;
+    public static string DriftScriptText => DriftScript;
+    // Reads the "replication" map the generated scripts print ({dc: ok|timeout|unreachable}) and returns the DCs not "ok".
+    public static string[] PendingDcs(string output) {
+        try {
+            using var doc = JsonDocument.Parse(output);
+            if (doc.RootElement.ValueKind != JsonValueKind.Object || !doc.RootElement.TryGetProperty("replication", out var r) || r.ValueKind != JsonValueKind.Object) return [];
+            return r.EnumerateObject().Where(p => p.Value.ValueKind == JsonValueKind.String && p.Value.GetString() != "ok").Select(p => p.Name).ToArray();
+        } catch (JsonException) { return []; }
+    }
     public static string ProbeScriptText => ProbeScript;
     public static string CaptureStartScriptText => CaptureStartScript;
     public static string CaptureStopScriptText => CaptureStopScript;
