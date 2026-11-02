@@ -35,21 +35,18 @@
       <p class="intro" data-i18n="how.intro"></p>
 
       <div class="stage">
-        <div class="diagram" id="diagram" role="img" aria-labelledby="scene-title"></div>
-        <div class="story">
-          <p class="counter" id="scene-count"></p>
-          <h3 id="scene-title"></h3>
-          <p class="caption" id="caption" aria-live="polite"></p>
-          <div class="controls">
-            <button type="button" class="ctl" id="btn-prev"></button>
-            <button type="button" class="ctl" id="btn-play"></button>
-            <button type="button" class="ctl" id="btn-next"></button>
-          </div>
-          <div class="compare" role="group">
+        <div class="diagram-wrap">
+          <div class="compare" role="group" aria-labelledby="compare-label">
+            <span id="compare-label" data-i18n="controls.compare">Comparar:</span>
             <button type="button" class="ctl" id="btn-before"></button>
             <button type="button" class="ctl" id="btn-after"></button>
           </div>
-          <ul class="legend" id="legend"></ul>
+          <div class="diagram" id="diagram" role="img" aria-describedby="states"></div>
+        </div>
+        <div class="story">
+          <p class="before-text" id="before-text" data-i18n="beforeText" hidden></p>
+          <ul class="states" id="states"></ul>
+          <p class="also" data-i18n="alsoNote"></p>
         </div>
       </div>
     </section>

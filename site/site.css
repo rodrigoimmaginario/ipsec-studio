@@ -50,17 +50,27 @@ button { font: inherit; cursor: pointer; }
 .diagram { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 10px; }
 .diagram svg { display: block; width: 100%; height: auto; }
 .story { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 22px; display: flex; flex-direction: column; }
-.counter { color: var(--muted); font-size: .85rem; margin: 0 0 6px; min-height: 1.2em; }
-.story h3 { margin: 0 0 10px; font-size: 1.2rem; line-height: 1.3; }
-.caption { color: var(--ink); opacity: .9; margin: 0 0 18px; min-height: 7.5em; }
-.controls, .compare { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+.diagram-wrap { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.compare { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; color: var(--muted); font-size: .9rem; }
+.before-text { margin: 0 0 14px; padding: 10px 12px; border-left: 3px solid var(--clear); color: var(--ink); background: rgba(143,155,171,.08); border-radius: 6px; }
+.before-text[hidden] { display: none; }
+.states { list-style: none; padding: 0; margin: 0; display: grid; gap: 14px; transition: opacity .3s; }
+.states.dim { opacity: .35; }
+.state { display: grid; grid-template-columns: 26px 1fr; gap: 10px; align-items: start; }
+.state b { display: block; font-size: 1rem; margin-bottom: 2px; }
+.state p { margin: 0; color: var(--muted); font-size: .92rem; line-height: 1.5; }
+.mark { width: 22px; height: 22px; border-radius: 50%; margin-top: 2px; position: relative; }
+.state.refused .mark { background: var(--refused-badge); box-shadow: inset 0 0 0 2px var(--refused); }
+.state.refused .mark::after { content: '×'; position: absolute; inset: 0; display: grid; place-items: center; color: #fff; font-weight: 700; line-height: 1; }
+.state.auth .mark { background: var(--auth); }
+.state.auth .mark::after { content: '✓'; position: absolute; inset: 0; display: grid; place-items: center; color: #fff; font-size: 13px; }
+.state.enc .mark { background: var(--enc); }
+.state.enc .mark::after { content: ''; position: absolute; left: 7px; top: 10px; width: 8px; height: 6px; border: 2px solid #fff; border-radius: 1px; }
+.state.boundary .mark { background: transparent; border: 2px dashed var(--boundary); }
+.also { margin: 18px 0 0; padding-top: 14px; border-top: 1px solid var(--line); color: var(--muted); font-size: .86rem; }
 .ctl { background: var(--surface-2); color: var(--ink); border: 1px solid var(--line); border-radius: 8px; padding: 7px 12px; font-size: .9rem; }
 .ctl:hover { border-color: var(--muted); }
 .ctl[aria-pressed="true"] { border-color: var(--auth); color: #fff; }
-.legend { list-style: none; padding: 0; margin: auto 0 0; display: grid; grid-template-columns: 1fr 1fr; gap: 6px 12px; font-size: .86rem; color: var(--muted); }
-.lg span { display: inline-block; width: 22px; height: 0; border-top: 3px solid; vertical-align: middle; margin-right: 8px; }
-.lg.auth span { border-color: var(--auth); } .lg.enc span { border-color: var(--enc); }
-.lg.clear span { border-color: var(--clear); border-top-style: dashed; } .lg.refused span { border-color: var(--refused); border-top-style: dotted; }
 
 /* diagram drawing */
 .zone rect { fill: rgba(91,155,224,.05); stroke: rgba(91,155,224,.35); stroke-width: 1.2; stroke-dasharray: 5 6; }
@@ -68,17 +78,18 @@ button { font: inherit; cursor: pointer; }
 .zone.restricted rect { fill: rgba(224,112,122,.07); stroke: var(--enc); stroke-dasharray: none; }
 .zone.boundary rect { fill: rgba(201,162,90,.07); stroke: var(--boundary); }
 .zone.exempt rect { fill: rgba(143,155,171,.06); stroke: var(--clear); }
-.zone.quarantine rect { fill: rgba(224,112,122,.08); stroke: var(--quarantine); stroke-dasharray: 3 4; }
-.zone.restricted text, .zone.boundary text, .zone.exempt text, .zone.quarantine text { font-size: 14px; font-weight: 600; }
-.zone.restricted text { fill: var(--enc); } .zone.boundary text { fill: var(--boundary); } .zone.quarantine text { fill: var(--quarantine); }
+.zone.group rect { fill: rgba(91,155,224,.10); stroke: var(--auth); stroke-dasharray: none; }
+.zone.restricted text, .zone.boundary text, .zone.group text { font-size: 14px; font-weight: 600; }
+.zone.restricted text { fill: var(--enc); } .zone.boundary text { fill: var(--boundary); } .zone.group text { fill: var(--auth); }
+.note { font-size: 13px; font-weight: 600; paint-order: stroke; stroke: var(--surface); stroke-width: 4px; }
+.note.refused { fill: #c9ced8; } .note.enc { fill: var(--enc); } .note.clear { fill: var(--boundary); } .note.auth { fill: var(--auth); }
 .node .dev { fill: #16294a; stroke: #5d7596; stroke-width: 1.5; }
 .node .dev-line { stroke: #5d7596; stroke-width: 1.5; fill: none; }
 .node text { fill: var(--muted); font-size: 16px; }
-.node { opacity: .5; transition: opacity .4s; }
-.node.on { opacity: 1; }
-.node.on .dev { fill: #1d3762; stroke: var(--ink); }
-.node.on text { fill: var(--ink); }
-.node.outsider .dev { stroke-dasharray: 4 3; }
+.node .dev { fill: #1d3762; stroke: #c3d0e0; }
+.node text { fill: var(--ink); }
+.node.outsider .dev { stroke: var(--boundary); stroke-dasharray: 4 3; fill: #2a2a2a; }
+.node.outsider text { fill: var(--muted); }
 .link .track { fill: none; stroke-width: 3; stroke-linecap: round; }
 .link .pulse { fill: none; stroke-width: 4.5; stroke-linecap: round; stroke-dasharray: 7 93; stroke-dashoffset: 100; animation: travel 2.2s linear infinite; animation-delay: calc(var(--i) * .35s); }
 .link.auth .track, .link.auth .pulse { stroke: var(--auth); }
@@ -88,13 +99,10 @@ button { font: inherit; cursor: pointer; }
 .badge circle { stroke: var(--bg); stroke-width: 2; }
 .badge path, .badge rect { fill: none; stroke: #fff; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .badge.auth circle { fill: var(--auth); } .badge.enc circle { fill: var(--enc); } .badge.refused circle { fill: var(--refused-badge); }
-.badge { animation: pop .5s ease-out both; animation-delay: calc(var(--i) * .35s + .6s); transform-box: fill-box; transform-origin: center; }
 @keyframes travel { from { stroke-dashoffset: 100; } to { stroke-dashoffset: 0; } }
 @keyframes travel-stop { 0% { stroke-dashoffset: 100; opacity: 1; } 80% { stroke-dashoffset: 20; opacity: 1; } 100% { stroke-dashoffset: 20; opacity: 0; } }
-@keyframes pop { from { transform: scale(.2); opacity: 0; } to { transform: scale(1); opacity: 1; } }
 svg[data-motion="reduced"] .pulse { display: none; }
-svg[data-motion="reduced"] .badge, svg[data-motion="reduced"] .node { animation: none; transition: none; }
-@media (prefers-reduced-motion: reduce) { .link .pulse { display: none; } .badge { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .link .pulse { display: none; } }
 
 /* footer and prototype selector */
 .foot { max-width: 1180px; margin: 0 auto; padding: 26px 28px 40px; border-top: 1px solid var(--line); color: var(--muted); display: flex; gap: 18px; flex-wrap: wrap; font-size: .9rem; }
@@ -112,5 +120,4 @@ svg[data-motion="reduced"] .badge, svg[data-motion="reduced"] .node { animation:
   .how { padding: 28px 18px 56px; }
   .diagram { overflow-x: auto; -webkit-overflow-scrolling: touch; }
   .diagram svg { min-width: 640px; }
-  .caption { min-height: 0; }
 }
