@@ -9,8 +9,11 @@ const root = path.resolve(path.dirname(new URL(import.meta.url).pathname.replace
 const read = (f) => fs.readFileSync(path.join(root, f), 'utf8');
 const html = read('index.html'), css = read('site.css'), i18n = read('i18n.js'), model = read('model.js'), site = read('site.js');
 
-// 1. No external resources: only the project's own GitHub links may leave the page.
-for (const [name, text] of [['index.html', html], ['site.css', css], ['i18n.js', i18n], ['model.js', model], ['site.js', site]]) {
+// 1. No external resources: only the project's own GitHub links and the reference links (plain navigation, nothing loaded) may leave the page.
+const refBlock = (model.match(/references: \[[\s\S]*?\n  \],/) || [''])[0];
+const refUrls = refBlock.match(/https:\/\/[^\s'"]+/g) || [];
+assert.ok(refUrls.every((u) => /^https:\/\/(learn\.microsoft\.com|web\.archive\.org)\//.test(u)), 'reference links only to Microsoft Learn or archived copies');
+for (const [name, text] of [['index.html', html], ['site.css', css], ['i18n.js', i18n], ['model.js', model.replace(refBlock, '')], ['site.js', site]]) {
   const urls = text.match(/https?:\/\/[^\s"'`)<]+/g) || [];
   const foreign = urls.filter((u) => !u.startsWith('https://github.com/rodrigoimmaginario/ipsec-studio') && !u.startsWith('http://www.w3.org/2000/svg'));
   assert.deepEqual(foreign, [], `${name} must not load external resources: ${foreign.join(', ')}`);
@@ -79,8 +82,12 @@ function load({ search = '', lang = null, reducedMotion = false } = {}) {
     assert.ok(lang.protects.items.every((p) => p.risk && p.how), 'each risk says how IPsec helps');
     assert.ok(lang.protects.limits.title && lang.protects.limits.text, 'limits stated');
     assert.equal(lang.benefits.items.length, 6, 'six benefits');
-    assert.ok(lang.benefits.items.every((b) => b.title && b.text) && lang.benefits.caseNote, 'benefits and case note');
+    assert.ok(lang.benefits.items.every((b) => b.title && b.text), 'benefits');
+    assert.ok(lang.protects.featured.risk && lang.protects.featured.how, 'group access among trusted machines highlighted');
+    assert.ok(lang.references.items && lang.references.noLink, 'references texts');
   }
+  assert.ok(/RH/.test(pt.protects.featured.how) && /HR/.test(en.protects.featured.how), 'featured risk uses the HR database example');
+  assert.ok(!('caseNote' in pt.benefits), 'no case quote in the benefits');
 }
 
 // 4. Default page: PT, variant A, the single diagram with the four states, no carousel.
@@ -90,10 +97,13 @@ function load({ search = '', lang = null, reducedMotion = false } = {}) {
   const d = els.diagram.innerHTML;
   assert.ok(d.includes('<svg') && d.includes('data-mode="after"'), 'diagram drawn with IPsec');
   for (const k of ['refused', 'auth', 'enc', 'clear']) assert.ok(d.includes('class="link ' + k + '"'), 'flow ' + k + ' drawn');
-  assert.ok(d.includes('fora do domínio') && d.includes('fora do grupo') && d.includes('só o grupo'), 'flow notes');
+  assert.ok(d.includes('fora do domínio') && d.includes('do domínio, mas não do RH') && d.includes('só o grupo'), 'flow notes');
   assert.ok(els.states.innerHTML.includes('Bloqueado') && els.states.innerHTML.includes('Fronteira'), 'four states explained');
   assert.equal((els['protect-items'].innerHTML.match(/<li /g) || []).length, 6, 'risk cards rendered');
   assert.equal((els['benefit-items'].innerHTML.match(/<li>/g) || []).length, 6, 'benefits rendered');
+  assert.ok(els['protect-featured'].innerHTML.includes('passe livre'), 'featured risk rendered');
+  assert.equal((els['ref-items'].innerHTML.match(/<li>/g) || []).length, 4, 'references rendered');
+  assert.ok(els['ref-items'].innerHTML.includes('sem link público'), 'reference without a verified link is marked');
   // A blocked connection is drawn only up to its X: the line ends where the badge is, before the responder.
   const blocked = [...d.matchAll(/<g class="link refused"[^>]*><path class="track" d="[^"]* ([\d.]+) ([\d.]+)"\/>.*?<circle cx="([\d.]+)" cy="([\d.]+)"/g)];
   assert.equal(blocked.length, 2, "both blocked flows found");

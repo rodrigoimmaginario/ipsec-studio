@@ -21,6 +21,7 @@ window.SITE_I18N = {
       eyebrow: 'Proteção',
       title: 'Contra o que o IPsec protege',
       intro: 'Riscos comuns da rede interna e o que muda quando cada conexão precisa se identificar.',
+      featured: { risk: 'Estar no domínio não é passe livre', how: 'Uma máquina do domínio é confiável, mas não precisa acessar tudo. O banco de dados do RH, por exemplo, só aceita as estações do grupo do RH: as demais máquinas do domínio, mesmo confiáveis, são recusadas. É o controle de acesso por grupo do IPsec, decidido pelo próprio servidor, que aplica o menor privilégio também na rede.' },
       items: [
         { risk: 'Dispositivo estranho na rede', how: 'Um notebook plugado num ponto de rede, no Wi-Fi interno ou trazido por um terceiro não tem identidade de máquina do domínio: os servidores recusam a conexão.' },
         { risk: 'Movimento lateral e ransomware', how: 'Servidores críticos só aceitam o grupo autorizado. Uma estação comprometida fora desse grupo não alcança o banco de dados nem o servidor de arquivos, o que reduz o alcance de quem já entrou.' },
@@ -42,7 +43,6 @@ window.SITE_I18N = {
         { title: 'Transparente para o usuário', text: 'Ninguém precisa instalar nada nem fazer login de novo. A negociação acontece entre as máquinas.' },
         { title: 'Gestão central e reversível', text: 'As regras vêm por GPO. Com o IPsec Studio, você simula antes, aplica aos poucos, verifica o resultado e volta atrás se precisar.' },
       ],
-      caseNote: 'Num caso real publicado pela Microsoft, uma universidade com 14 mil alunos consolidou duas redes físicas em uma com IPsec, sem custo adicional de hardware ou software.',
     },
     controls: { before: 'Antes', after: 'Com IPsec', compare: 'Comparar:' },
     states: {
@@ -54,12 +54,23 @@ window.SITE_I18N = {
     beforeText: 'Sem IPsec: qualquer máquina conectada à rede alcança qualquer servidor, inclusive as que ninguém conhece.',
     alsoNote: 'Também: controladores de domínio e dispositivos sem IPsec, como impressoras, ficam isentos por endereço; e uma máquina suspeita vai para a quarentena só entrando num grupo.',
     nodes: {
-      unknown: 'Notebook\ndesconhecido', visitor: 'Dispositivo\nde visitante', domain: 'Estação do domínio', authorized: 'Estação do\ngrupo autorizado',
-      app: 'Servidor de\naplicação', db: 'Banco de dados', wsus: 'WSUS',
+      unknown: 'Notebook\ndesconhecido', visitor: 'Dispositivo\nde visitante', domain: 'Estação do domínio', authorized: 'Estação\ndo RH',
+      app: 'Servidor de\naplicação', db: 'Banco de\ndados do RH', wsus: 'WSUS',
     },
-    zones: { isolated: 'Rede interna isolada — cada conexão autenticada', group: 'Grupo autorizado', restricted: 'Restrito · cifrado', boundary: 'Fronteira' },
-    notes: { outside: 'fora do domínio', group: 'só o grupo', notInGroup: 'fora do grupo', boundary: 'aceito na fronteira' },
+    zones: { isolated: 'Rede interna isolada — cada conexão autenticada', group: 'Grupo RH', restricted: 'Restrito · cifrado', boundary: 'Fronteira' },
+    notes: { outside: 'fora do domínio', group: 'só o grupo', notInGroup: 'do domínio, mas não do RH', boundary: 'aceito na fronteira' },
     proto: { label: 'Protótipo — abertura:' },
+    references: {
+      eyebrow: 'Referências',
+      title: 'Para se aprofundar',
+      noLink: 'sem link público',
+      items: {
+        mvp2006: { title: 'Do You Know Who Is Using Your Network?', meta: 'Artigo do mês MVP, Microsoft TechNet, setembro de 2006 (cópia arquivada, em inglês)' },
+        case2006: { title: 'Estudo de caso: isolamento de servidores e de domínio com IPsec em uma universidade', meta: 'publicado em 2006' },
+        msDomain: { title: 'Domain isolation policy design', meta: 'Documentação oficial da Microsoft (em inglês)' },
+        msServer: { title: 'Server isolation policy design', meta: 'Documentação oficial da Microsoft (em inglês)' },
+      },
+    },
     footer: { free: 'Gratuito e aberto (licença MIT). Sugestões são bem-vindas.', repo: 'Código no GitHub' },
   },
   en: {
@@ -82,6 +93,7 @@ window.SITE_I18N = {
       eyebrow: 'Protection',
       title: 'What IPsec protects against',
       intro: 'Common internal-network risks and what changes when every connection has to identify itself.',
+      featured: { risk: 'Being in the domain is not a free pass', how: 'A domain machine is trusted, but it does not need to reach everything. The HR database, for example, accepts only HR group workstations: every other domain machine, trusted as it is, is refused. This is IPsec group access control, decided by the server itself, applying least privilege on the network too.' },
       items: [
         { risk: 'A stranger device on the network', how: 'A laptop plugged into a wall port, on the internal Wi-Fi or brought in by a third party has no domain machine identity: servers refuse the connection.' },
         { risk: 'Lateral movement and ransomware', how: 'Critical servers accept only the authorized group. A compromised workstation outside that group cannot reach the database or the file server, which limits how far an intruder can go.' },
@@ -103,7 +115,6 @@ window.SITE_I18N = {
         { title: 'Transparent to users', text: 'Nobody installs anything or signs in again. The negotiation happens between the machines.' },
         { title: 'Central and reversible management', text: 'Rules come through GPO. With IPsec Studio you simulate first, apply in steps, verify the result and roll back if needed.' },
       ],
-      caseNote: 'In a real case published by Microsoft, a university with 14,000 students consolidated two physical networks into one with IPsec, at no additional hardware or software cost.',
     },
     controls: { before: 'Before', after: 'With IPsec', compare: 'Compare:' },
     states: {
@@ -115,12 +126,23 @@ window.SITE_I18N = {
     beforeText: 'Without IPsec: any machine connected to the network reaches any server, including ones nobody knows.',
     alsoNote: 'Also: domain controllers and devices without IPsec, such as printers, are exempted by address; and a suspicious machine goes into quarantine just by joining a group.',
     nodes: {
-      unknown: 'Unknown\nlaptop', visitor: 'Visitor\ndevice', domain: 'Domain workstation', authorized: 'Authorized\ngroup workstation',
-      app: 'Application\nserver', db: 'Database', wsus: 'WSUS',
+      unknown: 'Unknown\nlaptop', visitor: 'Visitor\ndevice', domain: 'Domain workstation', authorized: 'HR\nworkstation',
+      app: 'Application\nserver', db: 'HR\ndatabase', wsus: 'WSUS',
     },
-    zones: { isolated: 'Isolated internal network — every connection authenticated', group: 'Authorized group', restricted: 'Restricted · encrypted', boundary: 'Boundary' },
-    notes: { outside: 'outside the domain', group: 'group only', notInGroup: 'not in the group', boundary: 'accepted at the boundary' },
+    zones: { isolated: 'Isolated internal network — every connection authenticated', group: 'HR group', restricted: 'Restricted · encrypted', boundary: 'Boundary' },
+    notes: { outside: 'outside the domain', group: 'group only', notInGroup: 'domain, but not HR', boundary: 'accepted at the boundary' },
     proto: { label: 'Prototype — opening:' },
+    references: {
+      eyebrow: 'References',
+      title: 'Further reading',
+      noLink: 'no public link',
+      items: {
+        mvp2006: { title: 'Do You Know Who Is Using Your Network?', meta: 'MVP Article of the Month, Microsoft TechNet, September 2006 (archived copy)' },
+        case2006: { title: 'Case study: server and domain isolation with IPsec at a university', meta: 'published in 2006 (Portuguese)' },
+        msDomain: { title: 'Domain isolation policy design', meta: 'Official Microsoft documentation' },
+        msServer: { title: 'Server isolation policy design', meta: 'Official Microsoft documentation' },
+      },
+    },
     footer: { free: 'Free and open source (MIT license). Suggestions are welcome.', repo: 'Code on GitHub' },
   },
 };

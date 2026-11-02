@@ -120,7 +120,17 @@ svg[data-motion="reduced"] .pulse { display: none; }
 .benefit-list li::before { content: counter(b, decimal-leading-zero); position: absolute; left: 0; top: 1px; font-weight: 700; color: var(--auth); font-size: .95rem; letter-spacing: .04em; }
 .benefit-list b { display: block; font-size: 1.05rem; margin-bottom: 4px; }
 .benefit-list p { margin: 0; color: var(--muted); font-size: .94rem; }
-.case { color: var(--muted); font-size: .9rem; font-style: italic; max-width: 80ch; border-top: 1px solid var(--line); padding-top: 16px; margin: 0; }
+.card.featured { margin: 0 0 16px; border-top-color: var(--auth); background: linear-gradient(90deg, rgba(74,144,217,.10), var(--surface) 60%); }
+.card.featured h3 { font-size: 1.2rem; }
+.card.featured p { font-size: 1rem; max-width: 90ch; }
+.references { max-width: 1180px; margin: 0 auto; padding: 24px 28px 56px; border-top: 1px solid var(--line); }
+.references h2 { font-size: clamp(1.3rem, 2.4vw, 1.7rem); margin: 0 0 14px; }
+.ref-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 12px; }
+.ref-list li { display: grid; gap: 2px; }
+.ref-list a { color: var(--ink); text-decoration: underline; text-decoration-color: var(--auth); text-underline-offset: 3px; }
+.ref-list a:hover { color: var(--auth); }
+.ref-list em { color: var(--muted); font-size: .85rem; }
+.ref-list small { color: var(--muted); font-size: .86rem; }
 
 /* footer and prototype selector */
 .foot { max-width: 1180px; margin: 0 auto; padding: 26px 28px 40px; border-top: 1px solid var(--line); color: var(--muted); display: flex; gap: 18px; flex-wrap: wrap; font-size: .9rem; }
@@ -135,7 +145,7 @@ svg[data-motion="reduced"] .pulse { display: none; }
   .top nav { gap: 14px; }
   .top nav a[href="#how"] { display: none; }
   .hero { padding: 44px 18px 36px; }
-  .how, .protects, .benefits { padding: 28px 18px 48px; }
+  .how, .protects, .benefits, .references { padding: 28px 18px 48px; }
   .diagram { overflow-x: auto; -webkit-overflow-scrolling: touch; }
   .diagram svg { min-width: 640px; }
 }

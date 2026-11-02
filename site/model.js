@@ -15,15 +15,15 @@ window.SITE_MODEL = {
   zones: [
     { id: 'isolated', x: 190, y: 26, w: 760, h: 500, style: 'isolated' },
     { id: 'group', x: 250, y: 254, w: 180, h: 140, style: 'group' },
-    { id: 'restricted', x: 735, y: 196, w: 196, h: 130, style: 'restricted' },
-    { id: 'boundary', x: 735, y: 361, w: 196, h: 140, style: 'boundary' },
+    { id: 'restricted', x: 735, y: 196, w: 196, h: 146, style: 'restricted' },
+    { id: 'boundary', x: 735, y: 368, w: 196, h: 136, style: 'boundary' },
   ],
   // Every flow animates at the same time. "note" is an optional short label next to the badge (i18n.notes).
   flows: [
     { from: 'unknown', to: 'app', kind: 'refused', note: 'outside' },
     { from: 'domain', to: 'app', kind: 'auth' },
     { from: 'authorized', to: 'db', kind: 'enc', note: 'group' },
-    { from: 'domain', to: 'db', kind: 'refused', note: 'notInGroup', at: 0.68 },
+    { from: 'domain', to: 'db', kind: 'refused', note: 'notInGroup', at: 0.55 },
     { from: 'authorized', to: 'wsus', kind: 'auth' },
     { from: 'visitor', to: 'wsus', kind: 'clear', note: 'boundary', at: 0.66 },
   ],
@@ -33,6 +33,12 @@ window.SITE_MODEL = {
     { from: 'domain', to: 'db', kind: 'clear' }, { from: 'authorized', to: 'wsus', kind: 'clear' }, { from: 'visitor', to: 'wsus', kind: 'clear' },
     { from: 'visitor', to: 'db', kind: 'clear' } ],
   states: ['refused', 'auth', 'enc', 'boundary'],
+  references: [
+    { id: 'mvp2006', author: 'Rodrigo Immaginario', url: 'https://web.archive.org/web/20080504131441/http://www.microsoft.com:80/technet/community/columns/secmvp/sv0906.mspx' },
+    { id: 'case2006', author: 'Microsoft', url: null },
+    { id: 'msDomain', author: 'Microsoft Learn', url: 'https://learn.microsoft.com/en-us/windows/security/operating-system-security/network-security/windows-firewall/domain-isolation-policy-design' },
+    { id: 'msServer', author: 'Microsoft Learn', url: 'https://learn.microsoft.com/en-us/windows/security/operating-system-security/network-security/windows-firewall/server-isolation-policy-design' },
+  ],
   releases: 'https://github.com/rodrigoimmaginario/ipsec-studio/releases/latest',
   repository: 'https://github.com/rodrigoimmaginario/ipsec-studio',
 };

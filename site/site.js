@@ -79,6 +79,12 @@
     document.querySelectorAll('[data-i18n]').forEach((el) => { const v = get(L, el.getAttribute('data-i18n')); if (typeof v === 'string') el.textContent = v; });
     $('facts').innerHTML = L.facts.map((f) => `<li>${esc(f)}</li>`).join('');
     $('protect-items').innerHTML = L.protects.items.map((p) => `<li class="card"><h3>${esc(p.risk)}</h3><p>${esc(p.how)}</p></li>`).join('');
+    $('protect-featured').innerHTML = `<h3>${esc(L.protects.featured.risk)}</h3><p>${esc(L.protects.featured.how)}</p>`;
+    $('ref-items').innerHTML = M.references.map((r) => {
+      const t = L.references.items[r.id];
+      const title = r.url ? `<a href="${esc(r.url)}" rel="noopener">${esc(t.title)}</a>` : `<span>${esc(t.title)} <em>(${esc(L.references.noLink)})</em></span>`;
+      return `<li>${title}<small>${esc(r.author)} · ${esc(t.meta)}</small></li>`;
+    }).join('');
     $('benefit-items').innerHTML = L.benefits.items.map((b) => `<li><b>${esc(b.title)}</b><p>${esc(b.text)}</p></li>`).join('');
     $('btn-before').textContent = L.controls.before; $('btn-after').textContent = L.controls.after;
     $('lang-pt').setAttribute('aria-pressed', String(state.lang === 'pt'));
