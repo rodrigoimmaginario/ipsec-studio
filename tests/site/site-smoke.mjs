@@ -73,6 +73,14 @@ function load({ search = '', lang = null, reducedMotion = false } = {}) {
   assert.ok(M.before.every((l) => l.kind === 'clear'), 'before: everything in clear');
   for (const l of M.flows) if (l.note) for (const lang of [pt, en]) assert.ok(lang.notes[l.note], 'note ' + l.note);
   assert.ok(!/(melhor do mundo|revolucion|incr[ií]vel)/i.test(JSON.stringify(pt)), 'no hype words');
+  // Protection (risks and attacks) and benefits sections, with honest limits.
+  for (const lang of [pt, en]) {
+    assert.equal(lang.protects.items.length, 6, 'six risk scenarios');
+    assert.ok(lang.protects.items.every((p) => p.risk && p.how), 'each risk says how IPsec helps');
+    assert.ok(lang.protects.limits.title && lang.protects.limits.text, 'limits stated');
+    assert.equal(lang.benefits.items.length, 6, 'six benefits');
+    assert.ok(lang.benefits.items.every((b) => b.title && b.text) && lang.benefits.caseNote, 'benefits and case note');
+  }
 }
 
 // 4. Default page: PT, variant A, the single diagram with the four states, no carousel.
@@ -84,6 +92,12 @@ function load({ search = '', lang = null, reducedMotion = false } = {}) {
   for (const k of ['refused', 'auth', 'enc', 'clear']) assert.ok(d.includes('class="link ' + k + '"'), 'flow ' + k + ' drawn');
   assert.ok(d.includes('fora do domínio') && d.includes('fora do grupo') && d.includes('só o grupo'), 'flow notes');
   assert.ok(els.states.innerHTML.includes('Bloqueado') && els.states.innerHTML.includes('Fronteira'), 'four states explained');
+  assert.equal((els['protect-items'].innerHTML.match(/<li /g) || []).length, 6, 'risk cards rendered');
+  assert.equal((els['benefit-items'].innerHTML.match(/<li>/g) || []).length, 6, 'benefits rendered');
+  // A blocked connection is drawn only up to its X: the line ends where the badge is, before the responder.
+  const blocked = [...d.matchAll(/<g class="link refused"[^>]*><path class="track" d="[^"]* ([\d.]+) ([\d.]+)"\/>.*?<circle cx="([\d.]+)" cy="([\d.]+)"/g)];
+  assert.equal(blocked.length, 2, "both blocked flows found");
+  for (const m of blocked) assert.ok(Math.abs(+m[1] - +m[3]) < 1 && Math.abs(+m[2] - +m[4]) < 1, 'blocked line ends at the X');
   assert.equal(timers.length, 0, 'no carousel timer');
   els['btn-before'].fire('click');
   assert.ok(els.diagram.innerHTML.includes('data-mode="before"') && !els.diagram.innerHTML.includes('class="link refused"'), 'before: no protection');

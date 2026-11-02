@@ -29,7 +29,14 @@
     const p0 = [a.x + ux * r, a.y + uy * r], p3 = [b.x - ux * r, b.y - uy * r];
     const p1 = [p0[0] + (p3[0] - p0[0]) * 0.45, p0[1]], p2 = [p3[0] - (p3[0] - p0[0]) * 0.45, p3[1]];
     const at = (s) => [0, 1].map((i) => (1 - s) ** 3 * p0[i] + 3 * (1 - s) ** 2 * s * p1[i] + 3 * (1 - s) * s ** 2 * p2[i] + s ** 3 * p3[i]);
-    return { d: `M${p0[0].toFixed(1)} ${p0[1].toFixed(1)} C${p1[0].toFixed(1)} ${p1[1].toFixed(1)} ${p2[0].toFixed(1)} ${p2[1].toFixed(1)} ${p3[0].toFixed(1)} ${p3[1].toFixed(1)}`, at };
+    const path = (q0, q1, q2, q3) => `M${q0[0].toFixed(1)} ${q0[1].toFixed(1)} C${q1[0].toFixed(1)} ${q1[1].toFixed(1)} ${q2[0].toFixed(1)} ${q2[1].toFixed(1)} ${q3[0].toFixed(1)} ${q3[1].toFixed(1)}`;
+    // The curve cut at s (de Casteljau): a blocked connection is drawn only up to its "X" and never reaches the responder.
+    const until = (s) => {
+      const lerp = (u, v) => [u[0] + (v[0] - u[0]) * s, u[1] + (v[1] - u[1]) * s];
+      const a1 = lerp(p0, p1), b1 = lerp(p1, p2), c1 = lerp(p2, p3), a2 = lerp(a1, b1), b2 = lerp(b1, c1), e = lerp(a2, b2);
+      return path(p0, a1, a2, e);
+    };
+    return { d: path(p0, p1, p2, p3), at, until };
   }
   function badge(kind, [x, y]) {
     if (kind === 'refused') return `<g class="badge refused"><circle cx="${x}" cy="${y}" r="13"/><path d="M${x - 4.5} ${y - 4.5}l9 9M${x + 4.5} ${y - 4.5}l-9 9"/></g>`;
@@ -43,9 +50,11 @@
     const zones = M.zones.map((z) => `<g class="zone ${z.style}"><rect x="${z.x}" y="${z.y}" width="${z.w}" height="${z.h}" rx="14"/><text x="${z.x + 14}" y="${z.y + 22}">${esc(L.zones[z.id])}</text></g>`).join('');
     const paths = links.map((l, i) => {
       const g = geometry(l);
-      const pos = g.at(l.at ?? (l.kind === 'refused' ? 0.84 : 0.5)).map((v) => +v.toFixed(1));
+      const t = l.at ?? (l.kind === 'refused' ? 0.84 : 0.5);
+      const pos = g.at(t).map((v) => +v.toFixed(1));
+      const d = l.kind === 'refused' ? g.until(t) : g.d;
       const note = l.note && state.mode === 'after' ? `<text class="note ${l.kind}" x="${pos[0]}" y="${pos[1] - 20}" text-anchor="middle">${esc(L.notes[l.note])}</text>` : '';
-      return `<g class="link ${l.kind}" style="--i:${i}"><path class="track" d="${g.d}"/><path class="pulse" d="${g.d}" pathLength="100"/>${badge(l.kind, pos)}${note}</g>`;
+      return `<g class="link ${l.kind}" style="--i:${i}"><path class="track" d="${d}"/><path class="pulse" d="${d}" pathLength="100"/>${badge(l.kind, pos)}${note}</g>`;
     }).join('');
     const nodes = M.nodes.map((n) => `<g class="node${n.zone === 'outside' ? ' outsider' : ''}">${icon(n)}<text x="${n.x}" y="${n.y + 50}" text-anchor="middle">${String(L.nodes[n.id]).split('\n').map((p, k) => `<tspan x="${n.x}" dy="${k ? 18 : 0}">${esc(p)}</tspan>`).join('')}</text></g>`).join('');
     return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 540" data-mode="${state.mode}" data-motion="${reduced ? 'reduced' : 'full'}">${zones}<g class="links">${paths}</g>${nodes}</svg>`;
@@ -69,6 +78,8 @@
     $('subtitle').textContent = L.variants[state.variant].subtitle;
     document.querySelectorAll('[data-i18n]').forEach((el) => { const v = get(L, el.getAttribute('data-i18n')); if (typeof v === 'string') el.textContent = v; });
     $('facts').innerHTML = L.facts.map((f) => `<li>${esc(f)}</li>`).join('');
+    $('protect-items').innerHTML = L.protects.items.map((p) => `<li class="card"><h3>${esc(p.risk)}</h3><p>${esc(p.how)}</p></li>`).join('');
+    $('benefit-items').innerHTML = L.benefits.items.map((b) => `<li><b>${esc(b.title)}</b><p>${esc(b.text)}</p></li>`).join('');
     $('btn-before').textContent = L.controls.before; $('btn-after').textContent = L.controls.after;
     $('lang-pt').setAttribute('aria-pressed', String(state.lang === 'pt'));
     $('lang-en').setAttribute('aria-pressed', String(state.lang === 'en'));

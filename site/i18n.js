@@ -4,7 +4,7 @@ window.SITE_I18N = {
   pt: {
     lang: 'pt-BR',
     brand: 'IPsec Studio',
-    nav: { how: 'Como funciona', github: 'GitHub' },
+    nav: { how: 'Como funciona', protects: 'Proteção', github: 'GitHub' },
     variants: {
       a: { title: 'Você conhece o IPsec — ou ainda se lembra dele?', subtitle: 'Ele nunca saiu do seu Windows e continua sendo uma das defesas mais eficazes da rede interna. Agora, simples de adotar.' },
       b: { title: 'E se o IPsec ainda fosse a melhor defesa que você não está usando?', subtitle: 'Cada conexão autenticada, sem custo de licença, nativo no Windows. O IPsec Studio tira a complicação da implantação.' },
@@ -16,6 +16,33 @@ window.SITE_I18N = {
       eyebrow: 'Como funciona',
       title: 'Cada conexão precisa se identificar. Quem decide é o destino.',
       intro: 'O IPsec do Windows autentica as máquinas antes de qualquer conexão na rede interna, e pode cifrar o tráfego. As regras vêm do Active Directory, por política de grupo. O IPsec Studio planeja, simula, aplica aos poucos e verifica essas regras para você.',
+    },
+    protects: {
+      eyebrow: 'Proteção',
+      title: 'Contra o que o IPsec protege',
+      intro: 'Riscos comuns da rede interna e o que muda quando cada conexão precisa se identificar.',
+      items: [
+        { risk: 'Dispositivo estranho na rede', how: 'Um notebook plugado num ponto de rede, no Wi-Fi interno ou trazido por um terceiro não tem identidade de máquina do domínio: os servidores recusam a conexão.' },
+        { risk: 'Movimento lateral e ransomware', how: 'Servidores críticos só aceitam o grupo autorizado. Uma estação comprometida fora desse grupo não alcança o banco de dados nem o servidor de arquivos, o que reduz o alcance de quem já entrou.' },
+        { risk: 'Escuta e adulteração do tráfego', how: 'Nos servidores restritos, o tráfego vai cifrado. E toda conexão protegida tem a integridade verificada: um pacote alterado no caminho é descartado.' },
+        { risk: 'Endereço falso e servidor impostor', how: 'A autenticação é mútua, com Kerberos: os dois lados provam quem são. Copiar um endereço IP ou se passar por um servidor não basta.' },
+        { risk: 'Aplicações e protocolos antigos', how: 'O IPsec protege na camada de rede, sem mudar a aplicação. Sistemas que não cifram por conta própria passam a trafegar autenticados e, onde for preciso, cifrados.' },
+        { risk: 'Máquina suspeita durante um incidente', how: 'Colocar a máquina no grupo de quarentena a isola de todos os servidores, mantendo só o acesso da equipe de gestão para investigar e remediar.' },
+      ],
+      limits: { title: 'O que ele não resolve sozinho', text: 'O IPsec não impede o uso de uma credencial roubada numa máquina autorizada, não corrige vulnerabilidades de aplicação e não substitui firewall, EDR ou autenticação multifator. Ele fecha a rede interna para quem não deveria estar lá; o restante da defesa continua necessário.' },
+    },
+    benefits: {
+      eyebrow: 'Por que vale a pena',
+      title: 'Benefícios de adotar o IPsec',
+      items: [
+        { title: 'Já está no Windows', text: 'Sem licença, sem agente e sem hardware novo. Usa o Active Directory e a política de grupo que você já tem.' },
+        { title: 'Zero Trust na rede interna', text: 'Nenhuma conexão é confiável só por estar dentro da rede. Cada uma é autenticada, e o destino decide quem entra.' },
+        { title: 'Segmentação por identidade, não por cabo', text: 'A proteção acompanha a máquina e o grupo, não a VLAN ou o endereço. Dá para isolar redes sem redesenhar a infraestrutura física.' },
+        { title: 'Cifra onde importa', text: 'Servidores críticos recebem tráfego cifrado sem mexer nas aplicações nem nos certificados delas.' },
+        { title: 'Transparente para o usuário', text: 'Ninguém precisa instalar nada nem fazer login de novo. A negociação acontece entre as máquinas.' },
+        { title: 'Gestão central e reversível', text: 'As regras vêm por GPO. Com o IPsec Studio, você simula antes, aplica aos poucos, verifica o resultado e volta atrás se precisar.' },
+      ],
+      caseNote: 'Num caso real publicado pela Microsoft, uma universidade com 14 mil alunos consolidou duas redes físicas em uma com IPsec, sem custo adicional de hardware ou software.',
     },
     controls: { before: 'Antes', after: 'Com IPsec', compare: 'Comparar:' },
     states: {
@@ -38,7 +65,7 @@ window.SITE_I18N = {
   en: {
     lang: 'en',
     brand: 'IPsec Studio',
-    nav: { how: 'How it works', github: 'GitHub' },
+    nav: { how: 'How it works', protects: 'Protection', github: 'GitHub' },
     variants: {
       a: { title: 'Do you know IPsec — or still remember it?', subtitle: 'It never left your Windows, and it is still one of the most effective defenses for the internal network. Now, simple to adopt.' },
       b: { title: 'What if IPsec were still the best defense you are not using?', subtitle: 'Every connection authenticated, no license cost, built into Windows. IPsec Studio takes the complexity out of deploying it.' },
@@ -50,6 +77,33 @@ window.SITE_I18N = {
       eyebrow: 'How it works',
       title: 'Every connection has to identify itself. The responder decides.',
       intro: 'Windows IPsec authenticates machines before any connection on the internal network, and can encrypt the traffic. The rules come from Active Directory through Group Policy. IPsec Studio plans, simulates, applies in steps and verifies those rules for you.',
+    },
+    protects: {
+      eyebrow: 'Protection',
+      title: 'What IPsec protects against',
+      intro: 'Common internal-network risks and what changes when every connection has to identify itself.',
+      items: [
+        { risk: 'A stranger device on the network', how: 'A laptop plugged into a wall port, on the internal Wi-Fi or brought in by a third party has no domain machine identity: servers refuse the connection.' },
+        { risk: 'Lateral movement and ransomware', how: 'Critical servers accept only the authorized group. A compromised workstation outside that group cannot reach the database or the file server, which limits how far an intruder can go.' },
+        { risk: 'Eavesdropping and tampering', how: 'Traffic to restricted servers is encrypted. And every protected connection has its integrity checked: a packet altered on the way is dropped.' },
+        { risk: 'Spoofed addresses and impostor servers', how: 'Authentication is mutual, with Kerberos: both sides prove who they are. Copying an IP address or posing as a server is not enough.' },
+        { risk: 'Legacy applications and protocols', how: 'IPsec protects at the network layer, without changing the application. Systems that do not encrypt on their own get authenticated and, where needed, encrypted traffic.' },
+        { risk: 'A suspicious machine during an incident', how: 'Putting the machine in the quarantine group cuts it off from every server, keeping only the management team access to investigate and remediate.' },
+      ],
+      limits: { title: 'What it does not solve alone', text: 'IPsec does not stop a stolen credential used on an authorized machine, does not fix application vulnerabilities and does not replace a firewall, EDR or multi-factor authentication. It closes the internal network to those who should not be there; the rest of the defense is still needed.' },
+    },
+    benefits: {
+      eyebrow: 'Why it is worth it',
+      title: 'Benefits of adopting IPsec',
+      items: [
+        { title: 'It is already in Windows', text: 'No license, no agent, no new hardware. It uses the Active Directory and Group Policy you already have.' },
+        { title: 'Zero Trust on the internal network', text: 'No connection is trusted just for being inside the network. Each one is authenticated, and the responder decides who gets in.' },
+        { title: 'Segmentation by identity, not by cable', text: 'Protection follows the machine and its group, not the VLAN or the address. Networks can be isolated without redesigning the physical infrastructure.' },
+        { title: 'Encryption where it matters', text: 'Critical servers get encrypted traffic without touching the applications or their certificates.' },
+        { title: 'Transparent to users', text: 'Nobody installs anything or signs in again. The negotiation happens between the machines.' },
+        { title: 'Central and reversible management', text: 'Rules come through GPO. With IPsec Studio you simulate first, apply in steps, verify the result and roll back if needed.' },
+      ],
+      caseNote: 'In a real case published by Microsoft, a university with 14,000 students consolidated two physical networks into one with IPsec, at no additional hardware or software cost.',
     },
     controls: { before: 'Before', after: 'With IPsec', compare: 'Compare:' },
     states: {

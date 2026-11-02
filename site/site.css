@@ -100,9 +100,27 @@ button { font: inherit; cursor: pointer; }
 .badge path, .badge rect { fill: none; stroke: #fff; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .badge.auth circle { fill: var(--auth); } .badge.enc circle { fill: var(--enc); } .badge.refused circle { fill: var(--refused-badge); }
 @keyframes travel { from { stroke-dashoffset: 100; } to { stroke-dashoffset: 0; } }
-@keyframes travel-stop { 0% { stroke-dashoffset: 100; opacity: 1; } 80% { stroke-dashoffset: 20; opacity: 1; } 100% { stroke-dashoffset: 20; opacity: 0; } }
+/* blocked: the pulse runs only along the line drawn up to the "X", stops there and fades */
+@keyframes travel-stop { 0% { stroke-dashoffset: 100; opacity: 1; } 78% { stroke-dashoffset: 7; opacity: 1; } 100% { stroke-dashoffset: 7; opacity: 0; } }
 svg[data-motion="reduced"] .pulse { display: none; }
 @media (prefers-reduced-motion: reduce) { .link .pulse { display: none; } }
+
+/* protection and benefits */
+.protects, .benefits { max-width: 1180px; margin: 0 auto; padding: 40px 28px 64px; }
+.protects h2, .benefits h2 { font-size: clamp(1.5rem, 3vw, 2.2rem); line-height: 1.2; margin: 0 0 14px; }
+.cards { list-style: none; padding: 0; margin: 0 0 22px; display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 20px 20px 18px; border-top: 3px solid var(--enc); }
+.card h3 { margin: 0 0 8px; font-size: 1.05rem; }
+.card p { margin: 0; color: var(--muted); font-size: .94rem; }
+.limits { border-left: 3px solid var(--boundary); background: rgba(201,162,90,.07); border-radius: 8px; padding: 14px 18px; max-width: 900px; }
+.limits b { display: block; margin-bottom: 4px; }
+.limits p { margin: 0; color: var(--muted); font-size: .94rem; }
+.benefit-list { list-style: none; padding: 0; margin: 10px 0 26px; display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 22px 32px; counter-reset: b; }
+.benefit-list li { counter-increment: b; position: relative; padding-left: 46px; }
+.benefit-list li::before { content: counter(b, decimal-leading-zero); position: absolute; left: 0; top: 1px; font-weight: 700; color: var(--auth); font-size: .95rem; letter-spacing: .04em; }
+.benefit-list b { display: block; font-size: 1.05rem; margin-bottom: 4px; }
+.benefit-list p { margin: 0; color: var(--muted); font-size: .94rem; }
+.case { color: var(--muted); font-size: .9rem; font-style: italic; max-width: 80ch; border-top: 1px solid var(--line); padding-top: 16px; margin: 0; }
 
 /* footer and prototype selector */
 .foot { max-width: 1180px; margin: 0 auto; padding: 26px 28px 40px; border-top: 1px solid var(--line); color: var(--muted); display: flex; gap: 18px; flex-wrap: wrap; font-size: .9rem; }
@@ -117,7 +135,7 @@ svg[data-motion="reduced"] .pulse { display: none; }
   .top nav { gap: 14px; }
   .top nav a[href="#how"] { display: none; }
   .hero { padding: 44px 18px 36px; }
-  .how { padding: 28px 18px 56px; }
+  .how, .protects, .benefits { padding: 28px 18px 48px; }
   .diagram { overflow-x: auto; -webkit-overflow-scrolling: touch; }
   .diagram svg { min-width: 640px; }
 }
