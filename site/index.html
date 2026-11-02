@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; base-uri 'none'; form-action 'none'">
+  <title>IPsec Studio</title>
+  <meta name="description" content="IPsec Studio: isolamento de rede interna com o IPsec nativo do Windows. Planejar, simular, aplicar aos poucos, verificar e voltar atrás.">
+  <link rel="stylesheet" href="site.css">
+</head>
+<body>
+  <header class="top">
+    <a class="brand" href="#" id="brand">IPsec Studio</a>
+    <nav>
+      <a href="#how" data-i18n="nav.how">Como funciona</a>
+      <a href="https://github.com/rodrigoimmaginario/ipsec-studio" data-i18n="nav.github">GitHub</a>
+      <span class="lang"><button type="button" id="lang-pt" aria-label="Português">PT</button><span aria-hidden="true">·</span><button type="button" id="lang-en" aria-label="English">EN</button></span>
+    </nav>
+  </header>
+
+  <main>
+    <section class="hero">
+      <h1 id="headline">Você ainda se lembra do IPsec?</h1>
+      <p class="subtitle" id="subtitle"></p>
+      <div class="cta">
+        <a class="btn primary" href="#how" id="cta-how" data-i18n="cta.how">Veja como funciona</a>
+        <a class="btn ghost" href="https://github.com/rodrigoimmaginario/ipsec-studio/releases/latest" id="cta-download" data-i18n="cta.download">Baixar grátis</a>
+      </div>
+      <ul class="facts" id="facts"></ul>
+    </section>
+
+    <section class="how" id="how">
+      <p class="eyebrow" data-i18n="how.eyebrow">Como funciona</p>
+      <h2 data-i18n="how.title"></h2>
+      <p class="intro" data-i18n="how.intro"></p>
+
+      <div class="stage">
+        <div class="diagram" id="diagram" role="img" aria-labelledby="scene-title"></div>
+        <div class="story">
+          <p class="counter" id="scene-count"></p>
+          <h3 id="scene-title"></h3>
+          <p class="caption" id="caption" aria-live="polite"></p>
+          <div class="controls">
+            <button type="button" class="ctl" id="btn-prev"></button>
+            <button type="button" class="ctl" id="btn-play"></button>
+            <button type="button" class="ctl" id="btn-next"></button>
+          </div>
+          <div class="compare" role="group">
+            <button type="button" class="ctl" id="btn-before"></button>
+            <button type="button" class="ctl" id="btn-after"></button>
+          </div>
+          <ul class="legend" id="legend"></ul>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="foot">
+    <span data-i18n="footer.free">Gratuito e aberto (licença MIT).</span>
+    <a href="https://github.com/rodrigoimmaginario/ipsec-studio" data-i18n="footer.repo">Código no GitHub</a>
+  </footer>
+
+  <aside class="proto" id="proto-panel" hidden>
+    <span data-i18n="proto.label">Protótipo — abertura:</span>
+    <button type="button" id="proto-a">A</button><button type="button" id="proto-b">B</button><button type="button" id="proto-c">C</button>
+  </aside>
+
+  <script src="i18n.js"></script>
+  <script src="model.js"></script>
+  <script src="site.js"></script>
+</body>
+</html>

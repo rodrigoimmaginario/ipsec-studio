@@ -4,7 +4,7 @@ name: checks
 on:
   pull_request:
     branches: [main]
-    paths: ['app/**', 'tests/**', 'scripts/**', '.github/workflows/**']
+    paths: ['app/**', 'site/**', 'tests/**', 'scripts/**', '.github/workflows/**']
   push:
     tags: ['v*']
 concurrency:

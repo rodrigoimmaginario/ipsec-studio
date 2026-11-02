@@ -1,0 +1,76 @@
+// IPsec Studio site — texts in PT-BR (default) and EN. Same keys in both languages (checked by tests/site/site-smoke.mjs).
+// Node labels may contain "\n" to break into two lines inside the diagram.
+window.SITE_I18N = {
+  pt: {
+    lang: 'pt-BR',
+    brand: 'IPsec Studio',
+    nav: { how: 'Como funciona', github: 'GitHub' },
+    variants: {
+      a: { title: 'Você ainda se lembra do IPsec?', subtitle: 'Ele nunca saiu do seu Windows e continua sendo uma das defesas mais eficazes da rede interna. Agora, simples de adotar.' },
+      b: { title: 'E se o IPsec ainda fosse a melhor defesa que você não está usando?', subtitle: 'Cada conexão autenticada, sem custo de licença, nativo no Windows. O IPsec Studio tira a complicação da implantação.' },
+      c: { title: 'Você ainda se lembra do IPsec? Ele ainda vale a pena.', subtitle: 'Zero Trust na sua rede interna, com o que já vem no Windows. Agora, sem complicação.' },
+    },
+    cta: { how: 'Veja como funciona', download: 'Baixar grátis' },
+    facts: ['Nativo no Windows', 'Sem custo de licença', 'Sem agente nem hardware novo', 'Gratuito e aberto'],
+    how: {
+      eyebrow: 'Como funciona',
+      title: 'Cada conexão precisa se identificar. Quem decide é o destino.',
+      intro: 'O IPsec do Windows autentica as máquinas antes de qualquer conexão na rede interna, e pode cifrar o tráfego. As regras vêm do Active Directory, por política de grupo. O IPsec Studio planeja, simula, aplica aos poucos e verifica essas regras para você.',
+    },
+    controls: { prev: 'Anterior', next: 'Próxima', play: 'Reproduzir', pause: 'Pausar', before: 'Antes', after: 'Depois', scene: 'Cena {0} de {1}', overview: 'Visão geral' },
+    legend: { clear: 'em claro', auth: 'autenticado', enc: 'cifrado', refused: 'recusado' },
+    nodes: {
+      unknown: 'Notebook\ndesconhecido', domain: 'Estação do domínio', authorized: 'Estação autorizada', quarantine: 'Em quarentena',
+      app: 'Servidor de\naplicação', db: 'Banco de dados', wsus: 'WSUS', admin: 'Gestão', dc: 'Controlador\nde domínio', printer: 'Impressora',
+    },
+    zones: { isolated: 'Rede interna isolada — cada conexão autenticada', restricted: 'Restrito · cifrado', boundary: 'Fronteira', exempt: 'Isentos por endereço', quarantine: 'Quarentena' },
+    scenes: [
+      { title: 'Antes do IPsec', caption: 'Na maioria das redes internas, qualquer máquina conectada alcança qualquer servidor, inclusive um notebook que ninguém conhece.' },
+      { title: 'Sem identidade, sem conexão', caption: 'Com IPsec, o servidor exige que a máquina se identifique antes de aceitar a conexão. O notebook desconhecido não consegue: é recusado.' },
+      { title: 'Máquinas do domínio passam autenticadas', caption: 'Uma estação do domínio se apresenta com Kerberos. O servidor confere e aceita. O tráfego segue autenticado, sem mudar nada para o usuário.' },
+      { title: 'Servidores restritos: só o grupo, e cifrado', caption: 'No banco de dados, só as máquinas autorizadas entram, e o tráfego vai cifrado. Outra máquina do domínio, mesmo autenticada, é recusada: quem decide é o destino.' },
+      { title: 'A fronteira atende os dois mundos', caption: 'Servidores de fronteira, como o WSUS, aceitam IPsec de quem tem e conexões em claro de quem ainda não tem.' },
+      { title: 'Isentos, de propósito', caption: 'Controladores de domínio e dispositivos sem IPsec, como impressoras, ficam isentos por endereço, de forma explícita e registrada.' },
+      { title: 'Quarentena por grupo', caption: 'Basta colocar a máquina num grupo: ela fica isolada de todos os servidores, menos da gestão, que pode remediá-la.' },
+    ],
+    overview: { before: 'Antes: tudo alcança tudo.', after: 'Depois: cada conexão autenticada; restritos cifrados; desconhecidos e quarentena recusados.' },
+    proto: { label: 'Protótipo — abertura:' },
+    footer: { free: 'Gratuito e aberto (licença MIT).', repo: 'Código no GitHub' },
+  },
+  en: {
+    lang: 'en',
+    brand: 'IPsec Studio',
+    nav: { how: 'How it works', github: 'GitHub' },
+    variants: {
+      a: { title: 'Remember IPsec?', subtitle: 'It never left your Windows, and it is still one of the most effective defenses for the internal network. Now, simple to adopt.' },
+      b: { title: 'What if IPsec were still the best defense you are not using?', subtitle: 'Every connection authenticated, no license cost, built into Windows. IPsec Studio takes the complexity out of deploying it.' },
+      c: { title: 'Remember IPsec? It is still worth it.', subtitle: 'Zero Trust on your internal network, with what already ships in Windows. Now, without the hassle.' },
+    },
+    cta: { how: 'See how it works', download: 'Download free' },
+    facts: ['Built into Windows', 'No license cost', 'No agent, no new hardware', 'Free and open source'],
+    how: {
+      eyebrow: 'How it works',
+      title: 'Every connection has to identify itself. The responder decides.',
+      intro: 'Windows IPsec authenticates machines before any connection on the internal network, and can encrypt the traffic. The rules come from Active Directory through Group Policy. IPsec Studio plans, simulates, applies in steps and verifies those rules for you.',
+    },
+    controls: { prev: 'Previous', next: 'Next', play: 'Play', pause: 'Pause', before: 'Before', after: 'After', scene: 'Scene {0} of {1}', overview: 'Overview' },
+    legend: { clear: 'clear', auth: 'authenticated', enc: 'encrypted', refused: 'refused' },
+    nodes: {
+      unknown: 'Unknown\nlaptop', domain: 'Domain workstation', authorized: 'Authorized\nworkstation', quarantine: 'Quarantined',
+      app: 'Application\nserver', db: 'Database', wsus: 'WSUS', admin: 'Management', dc: 'Domain\ncontroller', printer: 'Printer',
+    },
+    zones: { isolated: 'Isolated internal network — every connection authenticated', restricted: 'Restricted · encrypted', boundary: 'Boundary', exempt: 'Exempt by address', quarantine: 'Quarantine' },
+    scenes: [
+      { title: 'Before IPsec', caption: 'On most internal networks, any connected machine reaches any server, including a laptop nobody knows.' },
+      { title: 'No identity, no connection', caption: 'With IPsec, the server requires the machine to identify itself before accepting the connection. The unknown laptop cannot: it is refused.' },
+      { title: 'Domain machines get in, authenticated', caption: 'A domain workstation presents itself with Kerberos. The server checks and accepts. Traffic flows authenticated, with nothing changing for the user.' },
+      { title: 'Restricted servers: only the group, encrypted', caption: 'On the database, only authorized machines get in, and the traffic is encrypted. Another domain machine, even authenticated, is refused: the responder decides.' },
+      { title: 'The boundary serves both worlds', caption: 'Boundary servers, such as WSUS, accept IPsec from those who have it and clear connections from those who do not yet.' },
+      { title: 'Exempt, on purpose', caption: 'Domain controllers and devices without IPsec, such as printers, are exempted by address, explicitly and on record.' },
+      { title: 'Quarantine by group', caption: 'Just put the machine in a group: it is cut off from every server except management, which can remediate it.' },
+    ],
+    overview: { before: 'Before: everything reaches everything.', after: 'After: every connection authenticated; restricted servers encrypted; unknown and quarantined machines refused.' },
+    proto: { label: 'Prototype — opening:' },
+    footer: { free: 'Free and open source (MIT license).', repo: 'Code on GitHub' },
+  },
+};
