@@ -10,8 +10,8 @@
   <link rel="icon" href="img/favicon.svg" type="image/svg+xml">
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://rodrigoimmaginario.github.io/ipsec-studio/">
-  <meta property="og:title" content="IPsec Studio — o IPsec do Windows, agora simples de adotar">
-  <meta property="og:description" content="Cada conexão da rede interna autenticada e, onde importa, cifrada. Sem licença, sem agente. Planejar, simular, aplicar em ondas, verificar e voltar atrás.">
+  <meta property="og:title" content="IPsec Studio — você sabe quem está usando a sua rede?">
+  <meta property="og:description" content="Cada conexão da rede interna autenticada e, onde importa, cifrada, com o IPsec que já vem no Windows. Planejar, simular, aplicar em ondas, verificar e voltar atrás. Grátis e aberto.">
   <meta property="og:image" content="https://rodrigoimmaginario.github.io/ipsec-studio/img/og.png">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
@@ -19,121 +19,165 @@
   <link rel="stylesheet" href="site.css">
 </head>
 <body>
-  <header class="top">
-    <a class="brand" href="#" id="brand">IPsec Studio</a>
-    <nav>
-      <a href="#how" data-i18n="nav.how">Como funciona</a>
-      <a href="#protects" data-i18n="nav.protects">Proteção</a>
-      <a href="#steps" data-i18n="nav.steps">Passo a passo</a>
-      <a href="#proof" data-i18n="nav.proof">Prova</a>
-      <a href="#origin" data-i18n="nav.origin">Origem</a>
-      <a href="#download" data-i18n="nav.download">Baixar</a>
+  <div class="progress" aria-hidden="true"><span id="progress"></span></div>
+  <header class="top" id="top">
+    <div class="top-in">
+      <a class="brand" href="#inicio" id="brand"><span class="logo" aria-hidden="true">IS</span>IPsec Studio</a>
+      <nav class="links" id="nav-links" aria-label="Seções">
+        <a href="#como" data-sec="como" data-i18n="nav.how">Como funciona</a>
+        <a href="#protecao" data-sec="protecao" data-i18n="nav.protects">Proteção</a>
+        <a href="#passos" data-sec="passos" data-i18n="nav.steps">Passo a passo</a>
+        <a href="#prova" data-sec="prova" data-i18n="nav.proof">Prova</a>
+        <a href="#origem" data-sec="origem" data-i18n="nav.origin">Origem</a>
+      </nav>
+      <div class="right">
+        <span class="lang"><button type="button" id="lang-pt" aria-label="Português">PT</button><button type="button" id="lang-en" aria-label="English">EN</button></span>
+        <a class="gh" href="https://github.com/rodrigoimmaginario/ipsec-studio" data-i18n="nav.github">GitHub</a>
+        <a class="btn primary small" id="top-download" href="#baixar" data-i18n="nav.download">Baixar</a>
+        <button class="menu" id="menu" type="button" aria-expanded="false" aria-controls="sheet"><i></i><i></i><i></i><span class="sr" data-i18n="nav.menu">Menu</span></button>
+      </div>
+    </div>
+    <nav class="sheet" id="sheet" hidden aria-label="Menu">
+      <a href="#como" data-i18n="nav.how">Como funciona</a><a href="#protecao" data-i18n="nav.protects">Proteção</a><a href="#passos" data-i18n="nav.steps">Passo a passo</a>
+      <a href="#prova" data-i18n="nav.proof">Prova</a><a href="#origem" data-i18n="nav.origin">Origem</a><a href="#baixar" data-i18n="nav.download">Baixar</a>
       <a href="https://github.com/rodrigoimmaginario/ipsec-studio" data-i18n="nav.github">GitHub</a>
-      <span class="lang"><button type="button" id="lang-pt" aria-label="Português">PT</button><span aria-hidden="true">·</span><button type="button" id="lang-en" aria-label="English">EN</button></span>
     </nav>
   </header>
 
   <main>
-    <section class="hero">
-      <h1 id="headline">Você ainda se lembra do IPsec?</h1>
-      <p class="subtitle" id="subtitle"></p>
-      <div class="cta">
-        <a class="btn primary" href="#how" id="cta-how" data-i18n="cta.how">Veja como funciona</a>
-        <a class="btn ghost" href="https://github.com/rodrigoimmaginario/ipsec-studio/releases/latest" id="cta-download" data-i18n="cta.download">Baixar grátis</a>
-      </div>
-      <ul class="facts" id="facts"></ul>
-    </section>
-
-    <section class="how" id="how">
-      <p class="eyebrow" data-i18n="how.eyebrow">Como funciona</p>
-      <h2 data-i18n="how.title"></h2>
-      <p class="intro" data-i18n="how.intro"></p>
-
-      <div class="stage">
-        <div class="diagram-wrap">
-          <div class="compare" role="group" aria-labelledby="compare-label">
-            <span id="compare-label" data-i18n="controls.compare">Comparar:</span>
-            <button type="button" class="ctl" id="btn-before"></button>
-            <button type="button" class="ctl" id="btn-after"></button>
-          </div>
-          <div class="diagram" id="diagram" role="img" aria-describedby="states"></div>
+    <section class="hero" id="inicio">
+      <div class="hero-text">
+        <span class="pill" data-i18n="hero.pill"></span>
+        <h1 id="hero-title"></h1>
+        <p class="hero-lead" id="hero-lead"></p>
+        <p class="hero-sub" id="hero-text"></p>
+        <div class="ctas">
+          <a class="btn primary" id="cta-download" href="https://github.com/rodrigoimmaginario/ipsec-studio/releases/latest" data-i18n="cta.download"></a>
+          <a class="btn soft" id="cta-how" href="#como" data-i18n="cta.how"></a>
         </div>
-        <div class="story">
-          <p class="before-text" id="before-text" data-i18n="beforeText" hidden></p>
-          <ul class="states" id="states"></ul>
-          <p class="also" data-i18n="alsoNote"></p>
-        </div>
+        <ul class="facts" id="facts"></ul>
+      </div>
+      <div class="hero-art">
+        <div class="tilt"><div class="window"><div class="wbar" aria-hidden="true"><i></i><i></i><i></i></div><img id="hero-shot" src="img/passo-3-pt.png" alt="" width="1280" height="800"></div></div>
+        <span class="chip c-auth" aria-hidden="true"><b>✓</b><span data-i18n="chips.auth"></span><small>win10 → app1</small></span>
+        <span class="chip c-enc" aria-hidden="true"><b class="lock"></b><span data-i18n="chips.enc"></span><small>win11 → db1</small></span>
+        <span class="chip c-ref" aria-hidden="true"><b>✕</b><span data-i18n="chips.refused"></span><small data-i18n="chips.refusedSub"></small></span>
+        <span class="chip c-bnd" aria-hidden="true"><b>↺</b><span data-i18n="chips.rollback"></span></span>
       </div>
     </section>
 
-    <section class="protects" id="protects">
-      <p class="eyebrow" data-i18n="protects.eyebrow">Proteção</p>
-      <h2 data-i18n="protects.title"></h2>
-      <p class="intro" data-i18n="protects.intro"></p>
-      <div class="card featured" id="protect-featured"></div>
-      <ul class="cards" id="protect-items"></ul>
-      <div class="limits">
-        <b data-i18n="protects.limits.title"></b>
-        <p data-i18n="protects.limits.text"></p>
+    <section class="voice" id="pergunta">
+      <p class="eyebrow" data-i18n="voice.eyebrow"></p>
+      <div class="bubbles" id="voice-items"></div>
+      <p class="answer" data-i18n="voice.answer"></p>
+    </section>
+
+    <section class="how" id="como">
+      <div class="head">
+        <p class="eyebrow" data-i18n="how.eyebrow"></p>
+        <h2 data-i18n="how.title"></h2>
+        <p class="lead" data-i18n="how.intro"></p>
+      </div>
+      <div class="story">
+        <div class="pin"><div class="diagram" id="diagram" role="img"></div></div>
+        <div class="scenes" id="scenes"></div>
       </div>
     </section>
 
-    <section class="benefits" id="benefits">
-      <p class="eyebrow" data-i18n="benefits.eyebrow">Por que vale a pena</p>
-      <h2 data-i18n="benefits.title"></h2>
+    <section class="protects" id="protecao">
+      <div class="head">
+        <p class="eyebrow" data-i18n="protects.eyebrow"></p>
+        <h2 data-i18n="protects.title"></h2>
+        <p class="lead" data-i18n="protects.intro"></p>
+      </div>
+      <div class="bento">
+        <article class="tile featured" id="protect-featured"></article>
+        <ul class="tiles" id="protect-items"></ul>
+      </div>
+      <div class="limits"><b data-i18n="protects.limits.title"></b><p data-i18n="protects.limits.text"></p></div>
+    </section>
+
+    <section class="benefits" id="beneficios">
+      <div class="head">
+        <p class="eyebrow" data-i18n="benefits.eyebrow"></p>
+        <h2 data-i18n="benefits.title"></h2>
+      </div>
       <ul class="benefit-list" id="benefit-items"></ul>
     </section>
 
-    <section class="why" id="why">
-      <p class="eyebrow" data-i18n="why.eyebrow"></p>
-      <h2 data-i18n="why.title"></h2>
-      <p class="intro" data-i18n="why.intro"></p>
-      <ul class="fears" id="why-items"></ul>
+    <section class="why" id="por-que">
+      <div class="why-grid">
+        <div>
+          <p class="eyebrow" data-i18n="why.eyebrow"></p>
+          <h2 data-i18n="why.title"></h2>
+          <p class="lead" data-i18n="why.intro"></p>
+          <div class="art" id="why-art" aria-hidden="true"></div>
+        </div>
+        <ul class="fears" id="why-items"></ul>
+      </div>
     </section>
 
-    <section class="steps" id="steps">
-      <p class="eyebrow" data-i18n="steps.eyebrow"></p>
-      <h2 data-i18n="steps.title"></h2>
-      <p class="intro" data-i18n="steps.intro"></p>
-      <ol class="step-list" id="step-items"></ol>
-      <p class="sample" data-i18n="steps.sample"></p>
+    <section class="steps" id="passos">
+      <div class="head">
+        <p class="eyebrow" data-i18n="steps.eyebrow"></p>
+        <h2 data-i18n="steps.title"></h2>
+        <p class="lead" data-i18n="steps.intro"></p>
+      </div>
+      <div class="steps-body">
+        <ol class="step-texts" id="step-texts"></ol>
+        <div class="pin">
+          <figure class="window big">
+            <div class="wbar"><i></i><i></i><i></i><span id="shot-label"></span></div>
+            <div class="zoom" id="shots"></div>
+            <figcaption data-i18n="steps.sample"></figcaption>
+          </figure>
+        </div>
+      </div>
     </section>
 
-    <section class="proof" id="proof">
-      <p class="eyebrow" data-i18n="proof.eyebrow"></p>
-      <h2 data-i18n="proof.title"></h2>
-      <p class="intro" data-i18n="proof.intro"></p>
+    <section class="proof" id="prova">
+      <div class="head">
+        <p class="eyebrow" data-i18n="proof.eyebrow"></p>
+        <h2 data-i18n="proof.title"></h2>
+        <p class="lead" data-i18n="proof.intro"></p>
+      </div>
+      <ul class="stats" id="proof-stats"></ul>
       <div class="proof-grid">
         <ul class="checks" id="proof-items"></ul>
-        <div class="limits">
-          <b data-i18n="proof.limits.title"></b>
-          <ul id="proof-limits"></ul>
-        </div>
+        <div class="limits"><b data-i18n="proof.limits.title"></b><ul id="proof-limits"></ul></div>
       </div>
       <p><a class="more" id="proof-more" href="#" data-i18n="proof.more"></a></p>
     </section>
 
-    <section class="origin" id="origin">
-      <p class="eyebrow" data-i18n="origin.eyebrow"></p>
-      <h2 data-i18n="origin.title"></h2>
-      <div class="origin-text" id="origin-text"></div>
+    <section class="origin" id="origem">
+      <div class="origin-grid">
+        <div>
+          <p class="eyebrow" data-i18n="origin.eyebrow"></p>
+          <h2 data-i18n="origin.title"></h2>
+          <ol class="timeline" id="origin-timeline"></ol>
+          <div class="art" id="origin-art" aria-hidden="true"></div>
+        </div>
+        <div class="origin-text" id="origin-text"></div>
+      </div>
     </section>
 
-    <section class="download" id="download">
-      <p class="eyebrow" data-i18n="download.eyebrow"></p>
-      <h2 data-i18n="download.title"></h2>
+    <section class="download" id="baixar">
+      <div class="head">
+        <p class="eyebrow" data-i18n="download.eyebrow"></p>
+        <h2 data-i18n="download.title"></h2>
+      </div>
       <div class="download-grid">
-        <div>
+        <div class="tile">
           <h3 data-i18n="download.requirementsTitle"></h3>
           <ul class="checks" id="req-items"></ul>
           <p class="verify-text" data-i18n="download.verify"></p>
           <code class="verify" data-i18n="download.verifyCmd"></code>
-          <div class="cta">
+          <div class="ctas">
             <a class="btn primary" id="dl-release" href="#" data-i18n="download.release"></a>
-            <a class="btn ghost" id="dl-install" href="#" data-i18n="download.install"></a>
+            <a class="btn soft" id="dl-install" href="#" data-i18n="download.install"></a>
           </div>
         </div>
-        <div class="contribute">
+        <div class="tile contribute">
           <h3 data-i18n="download.contributeTitle"></h3>
           <p data-i18n="download.contribute"></p>
           <p><a class="more" id="dl-contribute" href="#" data-i18n="download.contributeLink"></a> · <span data-i18n="download.license"></span></p>
@@ -141,8 +185,8 @@
       </div>
     </section>
 
-    <section class="references" id="references">
-      <p class="eyebrow" data-i18n="references.eyebrow">Referências</p>
+    <section class="references" id="referencias">
+      <p class="eyebrow" data-i18n="references.eyebrow"></p>
       <h2 data-i18n="references.title"></h2>
       <ul class="ref-list" id="ref-items"></ul>
     </section>
@@ -152,11 +196,7 @@
     <span data-i18n="footer.free">Gratuito e aberto (licença MIT).</span>
     <a href="https://github.com/rodrigoimmaginario/ipsec-studio" data-i18n="footer.repo">Código no GitHub</a>
   </footer>
-
-  <aside class="proto" id="proto-panel" hidden>
-    <span data-i18n="proto.label">Protótipo — abertura:</span>
-    <button type="button" id="proto-a">A</button><button type="button" id="proto-b">B</button><button type="button" id="proto-c">C</button><button type="button" id="proto-d">D</button>
-  </aside>
+  <button class="to-top" id="to-top" type="button" hidden><span aria-hidden="true">↑</span><span class="sr" data-i18n="nav.top">Voltar ao topo</span></button>
 
   <script src="i18n.js"></script>
   <script src="model.js"></script>

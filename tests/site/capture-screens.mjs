@@ -131,16 +131,14 @@ const SHOT = `(async () => {
   if (shot === 'verify') { const h = [...document.querySelectorAll('#main h2')].find((x) => x.textContent === t('dep.probeTitle')); const b = h.closest('.card').getBoundingClientRect(); await fetch('/__rect', { method: 'POST', body: JSON.stringify({ bottom: Math.round(b.bottom + scrollY) }) }); }
   document.title = 'ready';
 })();`;
+// Share image: the opening alone (question, answer, the product with the outcome chips), 1200x630.
 const OG_CSS = `html, body { overflow: hidden !important; }
-.top nav, .cta, .facts, #proto-panel, .foot, main > section:not(.hero):not(.how) { display: none !important; }
-.top { padding: 26px 48px 0 !important; max-width: none !important; }
-main { display: grid; grid-template-columns: 440px 1fr; gap: 24px; align-items: center; padding: 0 40px 0 48px; height: 560px; }
-.hero, .how { padding: 0 !important; margin: 0 !important; max-width: none !important; }
-.hero h1 { font-size: 46px !important; line-height: 1.08 !important; margin: 0 0 18px !important; }
-.hero .subtitle { font-size: 19px !important; margin: 0 !important; }
-.how > .eyebrow, .how > h2, .how > .intro, .compare, .story { display: none !important; }
-.stage { display: block !important; margin: 0 !important; }
-.diagram { padding: 6px !important; }`;
+.progress, .top, .to-top, .foot, main > section:not(.hero), .facts, .ctas { display: none !important; }
+.hero { max-width: none !important; height: 630px; padding: 0 56px 0 60px !important; gap: 40px !important; grid-template-columns: 1fr 1.05fr !important; }
+.hero h1 { font-size: 54px !important; margin-bottom: 18px !important; }
+.hero-lead { font-size: 24px !important; }
+.hero-sub { font-size: 18px !important; margin: 0 !important; }
+.chip { animation: none !important; }`;
 const mime = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.png': 'image/png', '.svg': 'image/svg+xml', '.pdf': 'application/pdf' };
 const json = (res, body) => { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(body)); };
 let probeRect = null;

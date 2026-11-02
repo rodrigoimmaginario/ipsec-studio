@@ -1,5 +1,5 @@
-// Captures the design concepts as a reader sees them while scrolling (Edge via the DevTools protocol; no dependencies).
-// Usage: node design/conceitos/shoot.mjs <outDir> [c1|c2|c3 ...]
+// Captures the site as a reader sees it while scrolling, on desktop and mobile (Edge via the DevTools protocol; no dependencies).
+// Usage: node tests/site/scroll-shots.mjs <outDir>
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -14,13 +14,9 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 // Each stop: [name, JS that scrolls]; the screenshot is taken after the page settles.
 const at = (sel, off = 0) => `(() => { const el = document.querySelector(${JSON.stringify(sel)}); scrollTo(0, el.getBoundingClientRect().top + scrollY - ${off}); })()`;
 const STOPS = {
-  c1: [['01-abertura', 'scrollTo(0,0)'], ['02-pergunta', at('#pergunta')], ['03-como-intro', at('.scene[data-i="0"]', 300)], ['04-bloqueado', at('.scene[data-i="1"]', 300)],
-    ['05-cifrado', at('.scene[data-i="3"]', 300)], ['06-fronteira', at('.scene[data-i="4"]', 300)], ['07-passos', at('#passos')], ['08-passo-1', at('.step-texts li[data-i="0"]', 300)],
-    ['09-passo-3', at('.step-texts li[data-i="2"]', 300)], ['10-passo-5', at('.step-texts li[data-i="4"]', 300)]],
-  c2: [['01-abertura', 'scrollTo(0,0)'], ['02-pergunta', at('#pergunta', 60)], ['03-como', at('#como', 60)], ['04-como-cifrado', `${at('#como', 60)};document.querySelector('[data-tab="enc"]').click()`],
-    ['05-passos', at('#passos', 60)], ['06-passo-3', `${at('#passos', 60)};document.querySelector('[data-go="2"]').click()`], ['07-menu-rolado', 'scrollTo(0, 1600); scrollTo(0, 1500)']],
-  c3: [['01-abertura', 'scrollTo(0,0)'], ['02-como', at('#como', 30)], ['03-como-legenda', `${at('#como', 30)};document.querySelector('.legend li[data-state="enc"]').dispatchEvent(new MouseEvent('mouseenter'))`],
-    ['04-notas', at('#notas', 30)], ['05-passos', at('#passos', 30)], ['06-passo-4', at('.step[data-i="3"]', 30)]],
+  site: [['01-abertura', 'scrollTo(0,0)'], ['02-pergunta', at('#pergunta', 70)], ['03-como-antes', at('.scene[data-i="0"]', 330)], ['04-como-cifrado', at('.scene[data-i="3"]', 330)],
+    ['05-protecao', at('#protecao', 70)], ['06-porque', at('#por-que', 70)], ['07-passo-1', at('.step-text[data-i="0"]', 330)], ['08-passo-4', at('.step-text[data-i="3"]', 330)],
+    ['09-prova', at('#prova', 70)], ['10-origem', at('#origem', 70)], ['11-baixar', at('#baixar', 70)]],
 };
 
 async function main() {
@@ -41,10 +37,10 @@ async function main() {
       if (only.length && !only.includes(concept)) continue;
       for (const [device, w, h, mobile] of [['desk', 1440, 900, false], ['mob', 390, 844, true]]) {
         await cdp('Emulation.setDeviceMetricsOverride', { width: w, height: h, deviceScaleFactor: 1, mobile });
-        const url = 'file:///' + path.join(here, concept, 'index.html').replace(/\\/g, '/');
+        const url = 'file:///' + path.join(here, '..', '..', 'site', 'index.html').replace(/\\/g, '/');
         await cdp('Page.navigate', { url }); await sleep(1500);
         for (const [name, js] of stops) {
-          if (device === 'mob' && !['01-abertura', '03-como', '04-bloqueado', '05-passos', '09-passo-3', '02-como', '06-passo-3', '06-passo-4', '05-cifrado'].includes(name)) continue;
+          if (device === 'mob' && !['01-abertura', '03-como', '08-passo-4', '09-prova', '10-origem', '04-bloqueado', '05-passos', '09-passo-3', '02-como', '06-passo-3', '06-passo-4', '05-cifrado'].includes(name)) continue;
           await cdp('Runtime.evaluate', { expression: js }); await sleep(1800);
           const shot = await cdp('Page.captureScreenshot', { format: 'png' });
           const file = path.join(out, `${concept}-${device}-${name}.png`);
