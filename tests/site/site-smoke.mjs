@@ -103,7 +103,8 @@ function load({ search = '', lang = null, reducedMotion = false } = {}) {
   assert.equal((els['benefit-items'].innerHTML.match(/<li>/g) || []).length, 6, 'benefits rendered');
   assert.ok(els['protect-featured'].innerHTML.includes('passe livre'), 'featured risk rendered');
   assert.equal((els['ref-items'].innerHTML.match(/<li>/g) || []).length, 4, 'references rendered');
-  assert.ok(els['ref-items'].innerHTML.includes('sem link público'), 'reference without a verified link is marked');
+  assert.ok(els['ref-items'].innerHTML.includes('href="referencias/microsoft-case-study-uvv-ipsec-2006.pdf"'), 'case study PDF linked');
+  assert.ok(fs.existsSync(path.join(root, 'referencias', 'microsoft-case-study-uvv-ipsec-2006.pdf')), 'case study PDF published with the site');
   // A blocked connection is drawn only up to its X: the line ends where the badge is, before the responder.
   const blocked = [...d.matchAll(/<g class="link refused"[^>]*><path class="track" d="[^"]* ([\d.]+) ([\d.]+)"\/>.*?<circle cx="([\d.]+)" cy="([\d.]+)"/g)];
   assert.equal(blocked.length, 2, "both blocked flows found");

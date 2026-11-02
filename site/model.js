@@ -35,7 +35,7 @@ window.SITE_MODEL = {
   states: ['refused', 'auth', 'enc', 'boundary'],
   references: [
     { id: 'mvp2006', author: 'Rodrigo Immaginario', url: 'https://web.archive.org/web/20080504131441/http://www.microsoft.com:80/technet/community/columns/secmvp/sv0906.mspx' },
-    { id: 'case2006', author: 'Microsoft', url: null },
+    { id: 'case2006', author: 'Microsoft', url: 'referencias/microsoft-case-study-uvv-ipsec-2006.pdf' },
     { id: 'msDomain', author: 'Microsoft Learn', url: 'https://learn.microsoft.com/en-us/windows/security/operating-system-security/network-security/windows-firewall/domain-isolation-policy-design' },
     { id: 'msServer', author: 'Microsoft Learn', url: 'https://learn.microsoft.com/en-us/windows/security/operating-system-security/network-security/windows-firewall/server-isolation-policy-design' },
   ],

@@ -66,7 +66,7 @@ window.SITE_I18N = {
       noLink: 'sem link público',
       items: {
         mvp2006: { title: 'Do You Know Who Is Using Your Network?', meta: 'Artigo do mês MVP, Microsoft TechNet, setembro de 2006 (cópia arquivada, em inglês)' },
-        case2006: { title: 'Estudo de caso: isolamento de servidores e de domínio com IPsec em uma universidade', meta: 'publicado em 2006' },
+        case2006: { title: 'University Uses Existing Windows Investments to Tighten Network Security and Management', meta: 'Estudo de caso de cliente, 2006 (PDF, em inglês)' },
         msDomain: { title: 'Domain isolation policy design', meta: 'Documentação oficial da Microsoft (em inglês)' },
         msServer: { title: 'Server isolation policy design', meta: 'Documentação oficial da Microsoft (em inglês)' },
       },
@@ -138,7 +138,7 @@ window.SITE_I18N = {
       noLink: 'no public link',
       items: {
         mvp2006: { title: 'Do You Know Who Is Using Your Network?', meta: 'MVP Article of the Month, Microsoft TechNet, September 2006 (archived copy)' },
-        case2006: { title: 'Case study: server and domain isolation with IPsec at a university', meta: 'published in 2006 (Portuguese)' },
+        case2006: { title: 'University Uses Existing Windows Investments to Tighten Network Security and Management', meta: 'Customer case study, 2006 (PDF)' },
         msDomain: { title: 'Domain isolation policy design', meta: 'Official Microsoft documentation' },
         msServer: { title: 'Server isolation policy design', meta: 'Official Microsoft documentation' },
       },
