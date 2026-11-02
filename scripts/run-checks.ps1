@@ -15,6 +15,7 @@ Write-Host '== 2/3 UI render smoke (tests/browser/prototype-render.mjs) and site
 & node --check (Join-Path $root 'app\IpsecStudio\wwwroot\i18n.js'); if($LASTEXITCODE -ne 0){throw 'i18n.js syntax'}
 & node (Join-Path $root 'tests\browser\prototype-render.mjs'); if($LASTEXITCODE -ne 0){throw 'UI smoke failed'}
 & node (Join-Path $root 'tests\site\site-smoke.mjs'); if($LASTEXITCODE -ne 0){throw 'Site smoke failed'}
+& node (Join-Path $root 'tests\release\version-check.mjs'); if($LASTEXITCODE -ne 0){throw 'Release consistency failed'}
 Write-Host '== 3/3 build'
 & $dotnet build (Join-Path $root 'app\IpsecStudio\IpsecStudio.csproj') --nologo -v q; if($LASTEXITCODE -ne 0){throw 'Build failed'}
 if($Publish){

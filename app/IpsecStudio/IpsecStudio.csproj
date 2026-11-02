@@ -6,7 +6,7 @@
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     <RuntimeFrameworkVersion>10.0.14</RuntimeFrameworkVersion>
     <SelfContained>true</SelfContained>
-    <Version>0.3.0</Version>
+    <Version>0.4.0</Version>
     <AssemblyName>IpsecStudio</AssemblyName>
   </PropertyGroup>
   <ItemGroup><Content Include="scripts\**" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" /></ItemGroup>

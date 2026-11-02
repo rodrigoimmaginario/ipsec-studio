@@ -2,7 +2,7 @@
 // UI strings. pt-BR is the default; the last choice is kept in localStorage and sent to the backend as X-Lang.
 const I18N = {
   pt: {
-    tagline: 'IPSEC STUDIO · SERVER AND DOMAIN ISOLATION', brandSub: '0.3 · PERFIS DE PROTEÇÃO', plan: 'PLANO', flow: 'FLUXO', notConnected: 'Não conectado', noPlan: 'Nenhum plano aberto', draft: 'Rascunho não salvo',
+    tagline: 'IPSEC STUDIO · SERVER AND DOMAIN ISOLATION', brandSub: 'PERFIS DE PROTEÇÃO', plan: 'PLANO', flow: 'FLUXO', notConnected: 'Não conectado', noPlan: 'Nenhum plano aberto', draft: 'Rascunho não salvo',
     sideNote: 'AD → perfis → simulação → implantação', sideNoteText: 'Lê o AD e grava GPOs com a identidade de quem abriu o Studio, como o GPMC.',
     noInventory: 'Sem inventário', inventoryAt: 'Inventário {0}', deployOn: 'Implantação habilitada', readOnly: 'Somente leitura', processing: 'processando…', connecting: 'Conectando ao serviço local…',
     nav: { inventory: 'Inventário', profiles: 'Perfis', simulate: 'Simular', deploy: 'Implantar', saved: 'Planos salvos' },
@@ -33,7 +33,7 @@ const I18N = {
     actions: { inventory: 'Inventário', plan: 'Plano', assess: 'Avaliar', save: 'Salvar', compile: 'Compilar', apply: 'Aplicar', rollback: 'Reverter', probe: 'Sondar', open: 'Abrir', plans: 'Planos' },
   },
   en: {
-    tagline: 'IPSEC STUDIO · SERVER AND DOMAIN ISOLATION', brandSub: '0.3 · PROTECTION PROFILES', plan: 'PLAN', flow: 'FLOW', notConnected: 'Not connected', noPlan: 'No plan open', draft: 'Unsaved draft',
+    tagline: 'IPSEC STUDIO · SERVER AND DOMAIN ISOLATION', brandSub: 'PROTECTION PROFILES', plan: 'PLAN', flow: 'FLOW', notConnected: 'Not connected', noPlan: 'No plan open', draft: 'Unsaved draft',
     sideNote: 'AD → profiles → simulation → deployment', sideNoteText: 'Reads AD and writes GPOs with the identity of whoever opened the Studio, like GPMC.',
     noInventory: 'No inventory', inventoryAt: 'Inventory {0}', deployOn: 'Deployment enabled', readOnly: 'Read only', processing: 'working…', connecting: 'Connecting to the local service…',
     nav: { inventory: 'Inventory', profiles: 'Profiles', simulate: 'Simulate', deploy: 'Deploy', saved: 'Saved plans' },

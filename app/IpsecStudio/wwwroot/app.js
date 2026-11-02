@@ -1,5 +1,5 @@
 'use strict';
-// IPsec Studio 0.3 — plan the five protection profiles, simulate Windows IPsec outcomes, deploy GPOs, verify and probe.
+// IPsec Studio — plan the five protection profiles, simulate Windows IPsec outcomes, deploy GPOs, verify and probe.
 const state = { status: null, inventory: null, draft: null, saved: null, assessment: null, matrix: null, compilation: null, log: [], hosts: null, probe: null, plans: [], page: 'inventory', filter: '', busy: false, wave: 0, waveResult: null, approval: '', drift: null, ackDrift: false, capture: false, settleUntil: 0, pendingDcs: [] };
 // After a policy change the probe waits ~2 minutes (CV4.DS7): Windows keeps a recent clear fallback with boundary hosts for a while.
 const SETTLE_MS = 120000;

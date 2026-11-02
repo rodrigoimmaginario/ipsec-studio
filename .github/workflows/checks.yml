@@ -1,10 +1,11 @@
 name: checks
-# Cost controls: Linux runner only (1x minutes), pull requests and release tags only, path filter, one job,
-# cancel superseded runs, hard timeout. The primary gate is local (scripts/hooks/pre-push); this run confirms it.
+# Cost controls: Linux runner only (1x minutes), pull requests and release tags only, path filter,
+# cancel superseded runs, hard timeouts. The primary gate is local (scripts/hooks/pre-push); this run confirms it.
+# On a tag v*, a second job publishes the GitHub release (zip, .sha256, notes); only that job can write.
 on:
   pull_request:
     branches: [main]
-    paths: ['app/**', 'site/**', 'tests/**', 'scripts/**', '.github/workflows/**']
+    paths: ['app/**', 'site/**', 'tests/**', 'scripts/**', 'docs/release-notes/**', 'CHANGELOG.md', '.github/workflows/**']
   push:
     tags: ['v*']
 concurrency:
@@ -24,22 +25,41 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Tests, coverage gate, UI smoke, build
+      - name: Tests, coverage gate, UI and site smoke, release consistency, build
         shell: pwsh
         run: ./scripts/run-checks.ps1
-      - name: Publish win-x64 (release tags only)
-        if: startsWith(github.ref, 'refs/tags/v')
+
+  release:
+    needs: checks
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Tag matches the application version
         shell: pwsh
         run: |
+          $v = '${{ github.ref_name }}'.TrimStart('v')
+          if (-not (Select-String -Path app/IpsecStudio/Program.cs -SimpleMatch "const string Version = `"$v`"")) { throw "tag ${{ github.ref_name }} does not match Program.cs" }
+          if (-not (Test-Path "docs/release-notes/$v.md")) { throw "missing docs/release-notes/$v.md" }
+      - name: Publish win-x64 self-contained, zip and SHA-256
+        shell: pwsh
+        run: |
+          $name = 'ipsec-studio-${{ github.ref_name }}-win-x64.zip'
           dotnet publish app/IpsecStudio/IpsecStudio.csproj -c Release -r win-x64 --self-contained true -o artifacts/app --nologo -v q
-          Compress-Archive -Path artifacts/app/* -DestinationPath "artifacts/ipsec-studio-${{ github.ref_name }}-win-x64.zip"
-          (Get-FileHash "artifacts/ipsec-studio-${{ github.ref_name }}-win-x64.zip" -Algorithm SHA256).Hash.ToLower() | Set-Content "artifacts/ipsec-studio-${{ github.ref_name }}-win-x64.zip.sha256"
-      - name: Upload release package
-        if: startsWith(github.ref, 'refs/tags/v')
-        uses: actions/upload-artifact@v4
-        with:
-          name: ipsec-studio-${{ github.ref_name }}-win-x64
-          path: |
-            artifacts/*.zip
-            artifacts/*.sha256
-          retention-days: 30
+          Compress-Archive -Path artifacts/app/* -DestinationPath "artifacts/$name"
+          $hash = (Get-FileHash "artifacts/$name" -Algorithm SHA256).Hash.ToLower()
+          Set-Content -NoNewline -Path "artifacts/$name.sha256" -Value "$hash  $name`n"
+          Write-Host "SHA-256 $hash"
+      - name: Create the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          v="${GITHUB_REF_NAME#v}"
+          gh release create "$GITHUB_REF_NAME" artifacts/*.zip artifacts/*.sha256 \
+            --title "IPsec Studio $GITHUB_REF_NAME" --notes-file "docs/release-notes/$v.md" --verify-tag
