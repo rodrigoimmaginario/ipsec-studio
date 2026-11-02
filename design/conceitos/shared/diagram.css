@@ -1,0 +1,38 @@
+/* Diagram drawing shared by the concepts. Each concept sets the variables; the meaning of the state colours never changes. */
+.cd svg { display: block; width: 100%; height: auto; }
+.cd .zone rect { fill: var(--d-zone-fill); stroke: var(--d-zone-line); stroke-width: 1.2; stroke-dasharray: 5 6; transition: opacity .4s, stroke-width .4s; }
+.cd .zone text { fill: var(--d-muted); font-size: 15px; letter-spacing: .02em; }
+.cd .zone.restricted rect { fill: color-mix(in srgb, var(--enc) 9%, transparent); stroke: var(--enc); stroke-dasharray: none; }
+.cd .zone.boundary rect { fill: color-mix(in srgb, var(--boundary) 9%, transparent); stroke: var(--boundary); }
+.cd .zone.group rect { fill: color-mix(in srgb, var(--auth) 11%, transparent); stroke: var(--auth); stroke-dasharray: none; }
+.cd .zone.restricted text, .cd .zone.boundary text, .cd .zone.group text { font-size: 14px; font-weight: 600; }
+.cd .zone.restricted text { fill: var(--enc); } .cd .zone.boundary text { fill: var(--boundary); } .cd .zone.group text { fill: var(--auth); }
+.cd .note { font-size: 13px; font-weight: 600; paint-order: stroke; stroke: var(--d-bg); stroke-width: 4px; }
+.cd .note.refused { fill: var(--d-ink); } .cd .note.enc { fill: var(--enc); } .cd .note.clear { fill: var(--boundary); } .cd .note.auth { fill: var(--auth); }
+.cd .node .dev { fill: var(--d-dev-fill); stroke: var(--d-dev-line); stroke-width: 1.5; }
+.cd .node .dev-line { stroke: var(--d-dev-line); stroke-width: 1.5; fill: none; }
+.cd .node text { fill: var(--d-ink); font-size: 16px; }
+.cd .node.outsider .dev { stroke: var(--boundary); stroke-dasharray: 4 3; fill: var(--d-outsider); }
+.cd .node.outsider text { fill: var(--d-muted); }
+.cd .link { transition: opacity .45s; }
+.cd .link .track { fill: none; stroke-width: 3; stroke-linecap: round; }
+.cd .link .pulse { fill: none; stroke-width: 4.5; stroke-linecap: round; stroke-dasharray: 7 93; stroke-dashoffset: 100; animation: cd-travel 2.2s linear infinite; animation-delay: calc(var(--i) * .35s); }
+.cd .link.auth .track, .cd .link.auth .pulse { stroke: var(--auth); }
+.cd .link.enc .track, .cd .link.enc .pulse { stroke: var(--enc); }
+.cd .link.clear .track { stroke: var(--clear); stroke-dasharray: 6 6; } .cd .link.clear .pulse { stroke: var(--clear); }
+.cd .link.refused .track { stroke: var(--refused); stroke-dasharray: 2 6; } .cd .link.refused .pulse { stroke: var(--refused); animation-name: cd-stop; }
+.cd .badge circle { stroke: var(--d-bg); stroke-width: 2; }
+.cd .badge path, .cd .badge rect { fill: none; stroke: #fff; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.cd .badge.auth circle { fill: var(--auth); } .cd .badge.enc circle { fill: var(--enc); } .cd .badge.refused circle { fill: var(--refused-badge); }
+.cd .callout circle { fill: var(--d-callout); } .cd .callout text { fill: var(--d-callout-ink); font: 700 12px ui-monospace, Consolas, monospace; }
+@keyframes cd-travel { from { stroke-dashoffset: 100; } to { stroke-dashoffset: 0; } }
+@keyframes cd-stop { 0% { stroke-dashoffset: 100; opacity: 1; } 78% { stroke-dashoffset: 7; opacity: 1; } 100% { stroke-dashoffset: 7; opacity: 0; } }
+.cd svg[data-motion="reduced"] .pulse { display: none; }
+@media (prefers-reduced-motion: reduce) { .cd .link .pulse { display: none; } }
+/* focus: one state at a time */
+.cd svg[data-focus] .link { opacity: .1; }
+.cd svg[data-focus="refused"] .link[data-state="refused"], .cd svg[data-focus="auth"] .link[data-state="auth"],
+.cd svg[data-focus="enc"] .link[data-state="enc"], .cd svg[data-focus="boundary"] .link[data-state="boundary"] { opacity: 1; }
+.cd svg[data-focus] .zone rect { opacity: .45; }
+.cd svg[data-focus="enc"] .zone[data-zone="restricted"] rect, .cd svg[data-focus="enc"] .zone[data-zone="group"] rect,
+.cd svg[data-focus="boundary"] .zone[data-zone="boundary"] rect { opacity: 1; stroke-width: 2.4; }

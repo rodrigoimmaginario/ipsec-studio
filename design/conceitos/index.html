@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>IPsec Studio — três conceitos de design</title>
+  <style>
+    body { margin: 0; font: 16px/1.6 "Segoe UI", system-ui, sans-serif; background: #f4f6f8; color: #15283a; }
+    main { max-width: 1100px; margin: 0 auto; padding: 50px 24px; }
+    h1 { font-size: 2rem; margin: 0 0 6px; } .lead { color: #56697b; margin: 0 0 30px; max-width: 52em; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 18px; }
+    a.card { display: block; text-decoration: none; color: inherit; border-radius: 14px; overflow: hidden; border: 1px solid #dbe3ea; background: #fff; transition: transform .2s, box-shadow .2s; }
+    a.card:hover { transform: translateY(-3px); box-shadow: 0 14px 40px rgba(21,40,58,.12); }
+    .sw { height: 140px; display: flex; align-items: flex-end; padding: 16px; font-weight: 700; font-size: 1.3rem; }
+    .c1 .sw { background: radial-gradient(circle at 75% 30%, #1d3a66, #070d17 70%); color: #eaf0f8; }
+    .c2 .sw { background: radial-gradient(circle at 80% 20%, #cfece8, #f6f9fb 70%); color: #14324a; }
+    .c3 .sw { background: #15171a linear-gradient(rgba(236,230,218,.06) 1px, transparent 1px) 0 0 / 22px 22px; color: #ece6da; font-family: Georgia, serif; font-weight: 400; border-bottom: 3px solid #d9a441; }
+    .txt { padding: 16px 18px 20px; } .txt b { display: block; margin-bottom: 4px; } .txt p { margin: 0; color: #56697b; font-size: .95rem; }
+    .how { margin-top: 30px; color: #56697b; font-size: .95rem; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Três conceitos de design</h1>
+    <p class="lead">Mesmo conteúdo aprovado, três experiências diferentes de navegação, rolagem e imagem. Cada protótipo tem a abertura, “Como funciona”, a pergunta de quem opera a rede e os cinco passos. Percorra no computador e no celular (janela estreita).</p>
+    <div class="grid">
+      <a class="card c1" href="c1/index.html"><div class="sw">1 — Narrativa guiada</div><div class="txt"><b>História em capítulos, escura e cinematográfica</b><p>Constelação na abertura, pontos de capítulo na lateral, diagrama fixo que acende um estado por vez e tela do app que amplia o trecho de cada passo enquanto você rola.</p></div></a>
+      <a class="card c2" href="c2/index.html"><div class="sw">2 — Produto em primeiro plano</div><div class="txt"><b>Ferramenta moderna, clara, com a cara do app</b><p>Cabeçalho fixo com download sempre à vista, tela do app em perspectiva com etiquetas de resultado, diagrama com abas por estado e passos com a tela grande.</p></div></a>
+      <a class="card c3" href="c3/index.html"><div class="sw">3 — Manual de campo</div><div class="txt"><b>Guia técnico de engenharia, grafite e âmbar</b><p>Sumário fixo à esquerda com trilho de leitura, figuras numeradas com legenda interativa, notas de campo com pergunta e resposta, e recortes ampliados das telas.</p></div></a>
+    </div>
+    <p class="how">Prova, Origem e Baixar entram na Fase 2, no conceito escolhido. Também dá para combinar partes de conceitos diferentes.</p>
+  </main>
+</body>
+</html>

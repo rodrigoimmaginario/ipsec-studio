@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Conceito 1 — Narrativa guiada · IPsec Studio</title>
+  <link rel="stylesheet" href="../shared/diagram.css">
+  <link rel="stylesheet" href="c1.css">
+</head>
+<body>
+  <div class="progress" aria-hidden="true"><span id="progress"></span></div>
+  <header class="bar" id="bar">
+    <a class="brand" href="#inicio"><i></i><i></i>IPsec Studio</a>
+    <a class="bar-cta" id="bar-download" href="#">Baixar</a>
+  </header>
+
+  <nav class="chapters" aria-label="Capítulos">
+    <a href="#inicio" data-ch="inicio"><span>Início</span></a>
+    <a href="#pergunta" data-ch="pergunta"><span>A pergunta</span></a>
+    <a href="#como" data-ch="como"><span>Como funciona</span></a>
+    <a href="#passos" data-ch="passos"><span>Passo a passo</span></a>
+  </nav>
+
+  <main>
+    <section class="hero" id="inicio" data-chapter>
+      <div class="sky" id="sky" aria-hidden="true"></div>
+      <div class="hero-text">
+        <p class="kicker">Server and Domain Isolation · IPsec nativo do Windows</p>
+        <h1 id="h1"></h1>
+        <p class="sub" id="sub"></p>
+        <div class="ctas"><a class="btn primary" href="#como" id="cta-how"></a><a class="btn ghost" href="#" id="cta-dl"></a></div>
+        <ul class="facts" id="facts"></ul>
+      </div>
+      <a class="cue" href="#pergunta" aria-label="Continuar"><span></span></a>
+    </section>
+
+    <section class="voice" id="pergunta" data-chapter>
+      <div class="people" aria-hidden="true" id="people"></div>
+      <div class="voice-text">
+        <p class="kicker">Quem opera a rede pergunta</p>
+        <blockquote>
+          <p>“E se uma regra errada derrubar o acesso ao controlador de domínio?”</p>
+          <p>“Como eu sei quem vai continuar alcançando quem?”</p>
+          <p>“E se eu precisar voltar atrás às três da manhã?”</p>
+        </blockquote>
+        <p class="answer">O IPsec Studio responde a essas perguntas <b>antes</b> de você aplicar qualquer coisa.</p>
+      </div>
+    </section>
+
+    <section class="story" id="como" data-chapter>
+      <div class="pin"><div class="cd card" id="diagram"></div></div>
+      <div class="scenes" id="scenes"></div>
+    </section>
+
+    <section class="steps" id="passos" data-chapter>
+      <div class="steps-head"><p class="kicker" id="steps-eyebrow"></p><h2 id="steps-title"></h2><p class="lead" id="steps-intro"></p></div>
+      <div class="steps-body">
+        <ol class="step-texts" id="step-texts"></ol>
+        <div class="pin"><figure class="frame"><div class="chrome"><i></i><i></i><i></i><span>IPsec Studio</span></div><div class="shots" id="shots"></div><figcaption id="sample"></figcaption></figure></div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="foot">Protótipo · <b>Conceito 1 — Narrativa guiada</b> · <a href="../index.html">ver os três conceitos</a></footer>
+
+  <script src="../../../site/i18n.js"></script>
+  <script src="../../../site/model.js"></script>
+  <script src="../shared/diagram.js"></script>
+  <script src="c1.js"></script>
+</body>
+</html>

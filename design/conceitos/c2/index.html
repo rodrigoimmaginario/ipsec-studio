@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Conceito 2 — Produto em primeiro plano · IPsec Studio</title>
+  <link rel="stylesheet" href="../shared/diagram.css">
+  <link rel="stylesheet" href="c2.css">
+</head>
+<body>
+  <header class="top" id="top">
+    <div class="top-in">
+      <a class="brand" href="#inicio"><span class="logo">IS</span>IPsec Studio</a>
+      <nav class="links" id="links" aria-label="Seções">
+        <a href="#como">Como funciona</a><a href="#passos">Passo a passo</a><a href="#prova">Prova</a><a href="#origem">Origem</a>
+      </nav>
+      <div class="right"><a class="gh" href="#">GitHub</a><a class="btn primary small" id="top-dl" href="#">Baixar</a>
+        <button class="menu" id="menu" aria-expanded="false" aria-controls="sheet" aria-label="Menu"><i></i><i></i><i></i></button></div>
+    </div>
+    <div class="sheet" id="sheet" hidden><a href="#como">Como funciona</a><a href="#passos">Passo a passo</a><a href="#prova">Prova</a><a href="#origem">Origem</a><a href="#">GitHub</a></div>
+  </header>
+
+  <main>
+    <section class="hero" id="inicio">
+      <div class="hero-text">
+        <span class="pill">Gratuito e aberto · IPsec nativo do Windows</span>
+        <h1 id="h1"></h1>
+        <p class="sub" id="sub"></p>
+        <div class="ctas"><a class="btn primary" id="cta-dl" href="#"></a><a class="btn soft" href="#como" id="cta-how"></a></div>
+        <ul class="facts" id="facts"></ul>
+      </div>
+      <div class="hero-art" aria-hidden="true">
+        <div class="tilt"><div class="window"><div class="wbar"><i></i><i></i><i></i></div><img src="../../../site/img/passo-3-pt.png" alt=""></div></div>
+        <span class="chip c-auth"><b>✓</b> Autenticado <small>win10 → app1</small></span>
+        <span class="chip c-enc"><b>🔒</b> Cifrado só para o RH <small>win11 → db1</small></span>
+        <span class="chip c-ref"><b>✕</b> Bloqueado <small>fora do domínio</small></span>
+        <span class="chip c-bnd"><b>↺</b> Reverter sempre disponível</span>
+      </div>
+    </section>
+
+    <section class="voice" id="pergunta">
+      <p class="eyebrow">Quem opera a rede pergunta</p>
+      <div class="bubbles">
+        <figure><div class="face f1"></div><blockquote>E se uma regra errada derrubar o acesso ao controlador de domínio?</blockquote></figure>
+        <figure><div class="face f2"></div><blockquote>Como eu sei quem vai continuar alcançando quem?</blockquote></figure>
+        <figure><div class="face f3"></div><blockquote>E se eu precisar voltar atrás às três da manhã?</blockquote></figure>
+      </div>
+      <p class="answer">O IPsec Studio responde a essas perguntas <b>antes</b> de você aplicar qualquer coisa.</p>
+    </section>
+
+    <section class="how" id="como">
+      <p class="eyebrow" id="how-eyebrow"></p>
+      <h2 id="how-title"></h2>
+      <p class="lead" id="how-intro"></p>
+      <div class="tabs" role="tablist" id="tabs"></div>
+      <div class="how-grid">
+        <div class="cd panel" id="diagram"></div>
+        <aside class="explain" id="explain" aria-live="polite"></aside>
+      </div>
+    </section>
+
+    <section class="steps" id="passos">
+      <p class="eyebrow" id="steps-eyebrow"></p>
+      <h2 id="steps-title"></h2>
+      <p class="lead" id="steps-intro"></p>
+      <ol class="stepper" id="stepper"></ol>
+      <div class="step-view">
+        <div class="step-copy" id="step-copy" aria-live="polite"></div>
+        <figure class="window big"><div class="wbar"><i></i><i></i><i></i><span id="step-label"></span></div><div class="zoom" id="zoom"></div><figcaption id="sample"></figcaption></figure>
+      </div>
+      <div class="step-nav"><button class="btn soft small" id="prev">← Anterior</button><button class="btn soft small" id="next">Próximo →</button></div>
+    </section>
+
+    <section class="stub" id="prova"><p>Prova, Origem e Baixar entram na Fase 2, no mesmo estilo.</p></section>
+    <section class="stub" id="origem"></section>
+  </main>
+
+  <footer class="foot">Protótipo · <b>Conceito 2 — Produto em primeiro plano</b> · <a href="../index.html">ver os três conceitos</a></footer>
+
+  <script src="../../../site/i18n.js"></script>
+  <script src="../../../site/model.js"></script>
+  <script src="../shared/diagram.js"></script>
+  <script src="c2.js"></script>
+</body>
+</html>
