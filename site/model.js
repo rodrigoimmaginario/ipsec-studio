@@ -35,8 +35,8 @@ window.SITE_MODEL = {
   states: ['refused', 'auth', 'enc', 'boundary'],
   references: [
     { id: 'case2006', author: 'Microsoft', url: 'referencias/microsoft-case-study-uvv-ipsec-2006.pdf' },
-    { id: 'msDomain', author: 'Microsoft Learn', url: 'https://learn.microsoft.com/en-us/windows/security/operating-system-security/network-security/windows-firewall/domain-isolation-policy-design' },
-    { id: 'msServer', author: 'Microsoft Learn', url: 'https://learn.microsoft.com/en-us/windows/security/operating-system-security/network-security/windows-firewall/server-isolation-policy-design' },
+    { id: 'msDomain', author: 'Microsoft Learn', url: 'https://learn.microsoft.com/en-us/previous-versions/windows/it-pro/windows-server-2008-r2-and-2008/cc725818(v=ws.10)' },
+    { id: 'msServer', author: 'Microsoft Learn', url: 'https://learn.microsoft.com/en-us/previous-versions/windows/it-pro/windows-server-2012-r2-and-2012/jj721528(v=ws.11)' },
   ],
   releases: 'https://github.com/rodrigoimmaginario/ipsec-studio/releases/latest',
   docs: {
