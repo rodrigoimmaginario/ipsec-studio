@@ -37,7 +37,7 @@ async function main() {
       if (only.length && !only.includes(concept)) continue;
       for (const [device, w, h, mobile] of [['desk', 1440, 900, false], ['mob', 390, 844, true]]) {
         await cdp('Emulation.setDeviceMetricsOverride', { width: w, height: h, deviceScaleFactor: 1, mobile });
-        const url = 'file:///' + path.join(here, '..', '..', 'site', 'index.html').replace(/\\/g, '/');
+        const url = process.env.SITE_URL || ('file:///' + path.join(here, '..', '..', 'site', 'index.html')).replace(/\\/g, '/');
         await cdp('Page.navigate', { url }); await sleep(1500);
         for (const [name, js] of stops) {
           if (device === 'mob' && !['01-abertura', '03-como', '08-passo-4', '09-prova', '10-origem', '04-bloqueado', '05-passos', '09-passo-3', '02-como', '06-passo-3', '06-passo-4', '05-cifrado'].includes(name)) continue;
