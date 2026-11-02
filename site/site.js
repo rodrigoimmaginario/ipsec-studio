@@ -106,16 +106,6 @@
     const ordered = kinds.map((k, i) => { const y = 36 + i * 42; const end = k === 'refused' ? 400 : 500; return `<path class="ord ${k}" d="M300 ${y}H${end}"/><circle class="dot" cx="300" cy="${y}" r="5"/>${k === 'refused' ? '' : `<circle class="dot" cx="500" cy="${y}" r="5"/>`}<circle class="b ${k}" cx="${k === 'refused' ? 400 : 420}" cy="${y}" r="9"/>`; }).join('');
     return `<svg viewBox="0 0 520 240"><path class="arrow" d="M244 120h40m-10-8 10 8-10 8"/>${tangle}${ordered}</svg>`;
   }
-  // Two separate networks (students and administration) that become one isolated network.
-  function originArt() {
-    const r = rng(5);
-    const cluster = (cx, cy, n, cls) => Array.from({ length: n }, (_, i) => { const a = (i / n) * Math.PI * 2 + r(); const d = 18 + r() * 26; return [cx + Math.cos(a) * d, cy + Math.sin(a) * d]; }).map(([x, y]) => `<line class="spoke ${cls}" x1="${cx}" y1="${cy}" x2="${x.toFixed(0)}" y2="${y.toFixed(0)}"/><circle class="n ${cls}" cx="${x.toFixed(0)}" cy="${y.toFixed(0)}" r="4"/>`).join('');
-    return `<svg viewBox="0 0 520 200">
-      <circle class="net a" cx="70" cy="62" r="52"/>${cluster(70, 62, 7, 'a')}<circle class="net b" cx="70" cy="148" r="44"/>${cluster(70, 148, 6, 'b')}
-      <path class="arrow" d="M150 105h60m-10-8 10 8-10 8"/>
-      <circle class="net one" cx="370" cy="102" r="92"/>${cluster(340, 80, 7, 'a')}${cluster(400, 128, 6, 'b')}
-      <g class="lockb"><circle cx="370" cy="104" r="12"/><rect x="364.5" y="103" width="11" height="8" rx="1.5"/><path d="M366.5 103v-3a3.5 3.5 0 0 1 7 0v3"/></g></svg>`;
-  }
 
   // ---------- rendering ----------
   function render() {
@@ -144,9 +134,6 @@
     $('proof-stats').innerHTML = L.proof.stats.map((s) => `<li><b>${esc(s.value)}</b><span>${esc(s.label)}</span></li>`).join('');
     $('proof-items').innerHTML = li(L.proof.items);
     $('proof-limits').innerHTML = li(L.proof.limits.items);
-    $('origin-timeline').innerHTML = L.origin.timeline.map((x) => `<li><b>${esc(x.year)}</b><span>${esc(x.text)}</span></li>`).join('');
-    $('origin-art').innerHTML = originArt();
-    $('origin-text').innerHTML = L.origin.paragraphs.map((p) => `<p>${esc(p)}</p>`).join('');
     $('req-items').innerHTML = li(L.download.requirements);
     $('ref-items').innerHTML = M.references.map((r) => {
       const x = L.references.items[r.id];

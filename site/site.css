@@ -197,19 +197,6 @@ svg[data-focus="enc"] .zone[data-zone="restricted"] rect, svg[data-focus="enc"] 
 .checks li { position: relative; padding-left: 28px; }
 .checks li::before { content: '✓'; position: absolute; left: 0; top: 0; color: var(--teal); font-weight: 700; }
 
-/* origin: timeline and two networks becoming one */
-.origin-grid { display: grid; grid-template-columns: 1fr 1.3fr; gap: 54px; }
-.timeline { list-style: none; padding: 0; margin: 10px 0 0; border-left: 2px solid var(--line); }
-.timeline li { position: relative; padding: 0 0 22px 24px; }
-.timeline li::before { content: ''; position: absolute; left: -7px; top: 6px; width: 12px; height: 12px; border-radius: 50%; background: var(--paper); border: 2px solid var(--teal); }
-.timeline li:last-child::before { background: var(--teal); }
-.timeline b { display: block; color: var(--teal); } .timeline span { color: var(--muted); font-size: .95rem; }
-.origin .art .net { fill: none; stroke: #9aaab8; stroke-width: 1.4; stroke-dasharray: 4 5; } .origin .art .net.one { stroke: var(--teal); stroke-dasharray: 6 6; stroke-width: 1.8; fill: rgba(8,126,128,.04); }
-.origin .art .spoke { stroke: #c3d0db; stroke-width: 1.2; } .origin .art .n { stroke: none; } .origin .art .n.a { fill: var(--auth); } .origin .art .n.b { fill: var(--boundary); }
-.origin .art .lockb circle { fill: var(--enc); } .origin .art .lockb rect, .origin .art .lockb path { fill: none; stroke: #fff; stroke-width: 2; stroke-linecap: round; }
-.origin-text p { margin: 0 0 16px; line-height: 1.7; }
-.origin-text p:first-child { font-size: 1.12rem; }
-
 /* download */
 .download-grid { display: grid; grid-template-columns: 3fr 2fr; gap: 20px; align-items: start; }
 .download h3 { font-size: 1.15rem; margin: 0 0 14px; }
@@ -235,7 +222,7 @@ svg[data-focus="enc"] .zone[data-zone="restricted"] rect, svg[data-focus="enc"] 
   #top-download { display: none; }
   .hero { grid-template-columns: 1fr; gap: 44px; padding-top: 36px !important; padding-bottom: 80px !important; }
   .c-auth { left: 0; } .c-enc { right: 0; } .chip small { display: none; }
-  .bubbles, .bento, .why-grid, .proof-grid, .origin-grid, .download-grid { grid-template-columns: 1fr; }
+  .bubbles, .bento, .why-grid, .proof-grid, .download-grid { grid-template-columns: 1fr; }
   .stats { grid-template-columns: 1fr 1fr; }
   .story, .steps-body { grid-template-columns: 1fr; gap: 0; }
   .pin, .steps .pin { top: 6px; z-index: 5; padding: 8px 0; background: var(--paper); }

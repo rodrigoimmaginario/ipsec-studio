@@ -1,6 +1,6 @@
 // Site smoke (CV3.DS5): PT/EN parity, the opening (question first, IPsec as the answer), the scroll story of the diagram
 // (before, the four states one at a time, all together), the five steps with real screens, protection, benefits, why,
-// proof with stated limits, origin, download, references, share metadata, reduced motion and no external resources.
+// proof with stated limits, download, references, share metadata, reduced motion and no external resources.
 // Runs the real site scripts in a minimal fake DOM.
 import fs from 'node:fs';
 import path from 'node:path';
@@ -15,7 +15,9 @@ const html = read('index.html'), css = read('site.css'), i18n = read('i18n.js'),
 //    and the Pages address in the share metadata may leave the page.
 const refBlock = (model.match(/references: \[[\s\S]*?\n  \],/) || [''])[0];
 const refUrls = refBlock.match(/https:\/\/[^\s'"]+/g) || [];
-assert.ok(refUrls.every((u) => /^https:\/\/(learn\.microsoft\.com|web\.archive\.org)\//.test(u)), 'reference links only to Microsoft Learn or archived copies');
+// Rodrigo (02/11): no links to web caches; references point to official Microsoft pages or to files published with the site.
+assert.ok(refUrls.length > 0 && refUrls.every((u) => /^https:\/\/learn\.microsoft\.com\//.test(u)), 'reference links only to official Microsoft Learn pages');
+assert.ok(!/web\.archive\.org/.test(html + model + i18n + site), 'no web cache links');
 const PAGES = 'https://rodrigoimmaginario.github.io/ipsec-studio/';
 for (const [name, text] of [['index.html', html], ['site.css', css], ['i18n.js', i18n], ['model.js', model.replace(refBlock, '')], ['site.js', site]]) {
   const urls = text.match(/https?:\/\/[^\s"'`)<]+/g) || [];
@@ -83,14 +85,8 @@ function load({ search = '', lang = null, reducedMotion = false } = {}) {
     assert.ok(lang.steps.items.every((s) => s.title && s.text && s.alt) && lang.steps.sample, 'steps described, sample data stated');
     assert.equal(lang.proof.stats.length, 4, 'four proof numbers');
     assert.ok(lang.proof.items.length >= 4 && lang.proof.limits.items.length >= 3, 'proof with stated limits');
-    assert.equal(lang.origin.timeline.length, 3, 'origin timeline');
-    assert.ok(!/(NAP|Network Access Protection|Longhorn|3DES|MD5)/.test(JSON.stringify(lang.origin)), 'origin does not bring dated technology');
     assert.ok(lang.download.requirements.length >= 3 && lang.download.verifyCmd && lang.download.contribute, 'download, verify and contribute');
   }
-  const origin = pt.origin.paragraphs.join(' ');
-  assert.ok(origin.includes('Você sabe quem está usando sua rede?'), 'origin refers back to the 2006 question');
-  assert.ok(/14 mil/.test(origin) && /duas redes/.test(origin) && /sem custo adicional/.test(origin), 'origin cites the case numbers');
-  assert.ok(/Zero Trust/.test(origin) && !/renomead/.test(origin), 'Zero Trust applied, not renamed');
   assert.ok(/RH/.test(pt.protects.featured.how), 'featured risk uses the HR database example');
   const visible = JSON.stringify(pt);
   assert.ok(!/drift/i.test(visible) && !/totalidade/i.test(visible) && !/(melhor do mundo|revolucion|incr[ií]vel)/i.test(visible), 'plain, sober wording');
@@ -104,10 +100,10 @@ function load({ search = '', lang = null, reducedMotion = false } = {}) {
 
 // 3b. Page structure, navigation, share metadata, images.
 {
-  const order = ['inicio', 'pergunta', 'como', 'protecao', 'beneficios', 'por-que', 'passos', 'prova', 'origem', 'baixar', 'referencias'];
+  const order = ['inicio', 'pergunta', 'como', 'protecao', 'beneficios', 'por-que', 'passos', 'prova', 'baixar', 'referencias'];
   const pos = order.map((id) => html.search(new RegExp(`<section[^>]+id="${id}"`)));
   assert.ok(pos.every((p) => p > 0) && pos.every((p, i) => i === 0 || p > pos[i - 1]), 'sections in the planned order');
-  for (const id of ['como', 'protecao', 'passos', 'prova', 'origem']) assert.ok(html.includes(`href="#${id}" data-sec="${id}"`), 'header link to ' + id);
+  for (const id of ['como', 'protecao', 'passos', 'prova']) assert.ok(html.includes(`href="#${id}" data-sec="${id}"`), 'header link to ' + id);
   assert.ok(html.includes('id="menu"') && html.includes('aria-controls="sheet"') && html.includes('id="to-top"') && html.includes('id="progress"'), 'mobile menu, back to top, reading progress');
   assert.match(html, /<link rel="canonical" href="https:\/\/rodrigoimmaginario\.github\.io\/ipsec-studio\/">/, 'canonical');
   for (const p of ['og:title', 'og:description', 'og:url', 'og:type']) assert.ok(html.includes(`property="${p}"`), p);
@@ -155,13 +151,13 @@ function load({ search = '', lang = null, reducedMotion = false } = {}) {
   assert.ok(els['protect-featured'].innerHTML.includes('passe livre') && (els['protect-items'].innerHTML.match(/<li /g) || []).length === 6, 'protection');
   assert.equal((els['benefit-items'].innerHTML.match(/<li>/g) || []).length, 6, 'benefits');
   assert.equal((els['why-items'].innerHTML.match(/<li>/g) || []).length, 4, 'fears');
-  assert.ok(els['why-art'].innerHTML.includes('<svg') && els['origin-art'].innerHTML.includes('<svg'), 'abstract images drawn');
+  assert.ok(els['why-art'].innerHTML.includes('<svg'), 'abstract image drawn');
+  // Origin section removed by Rodrigo (02/11); his publications stay in the references.
+  assert.ok(!html.includes('id="origem"') && !('origin' in ctx.SITE_I18N.pt) && !html.includes('href="#origem"'), 'no Origin section');
   assert.equal((els['proof-stats'].innerHTML.match(/<li>/g) || []).length, 4, 'proof numbers');
   assert.ok(els['proof-limits'].innerHTML.includes('<li>'), 'proof limits');
-  assert.equal((els['origin-timeline'].innerHTML.match(/<li>/g) || []).length, 3, 'timeline');
-  assert.ok(els['origin-text'].innerHTML.includes('14 mil'), 'origin text');
-  assert.equal((els['ref-items'].innerHTML.match(/<li>/g) || []).length, 5, 'references');
-  assert.ok(els['ref-items'].innerHTML.includes('quemusa-rodrigo.mspx') && els['ref-items'].innerHTML.includes('href="referencias/microsoft-case-study-uvv-ipsec-2006.pdf"'), 'own publications linked');
+  assert.equal((els['ref-items'].innerHTML.match(/<li>/g) || []).length, 3, 'references');
+  assert.ok(els['ref-items'].innerHTML.includes('href="referencias/microsoft-case-study-uvv-ipsec-2006.pdf"'), 'case study published with the site');
   assert.equal(els['dl-release'].getAttribute('href'), 'https://github.com/rodrigoimmaginario/ipsec-studio/releases/latest');
   assert.equal(els['cta-download'].getAttribute('href'), 'https://github.com/rodrigoimmaginario/ipsec-studio/releases/latest');
   assert.equal(els['dl-install'].getAttribute('href'), 'https://github.com/rodrigoimmaginario/ipsec-studio/blob/main/docs/pt-br/instalacao.md');
@@ -195,4 +191,4 @@ function load({ search = '', lang = null, reducedMotion = false } = {}) {
   assert.ok(/\.chip \{ animation: none; \}/.test(rm) && /\.js \.scene, \.js \.step-text \{ opacity: 1; \}/.test(rm), 'no floating chips, every scene readable');
 }
 
-console.log('PASS site: PT/EN parity, opening (question first), scroll story of the diagram (before, 4 states, all), 5 steps with real screens, protection, benefits, why, proof numbers and limits, origin timeline, download, references, navigation, share metadata, reduced motion, no external resources');
+console.log('PASS site: PT/EN parity, opening (question first), scroll story of the diagram (before, 4 states, all), 5 steps with real screens, protection, benefits, why, proof numbers and limits, download, references, navigation, share metadata, reduced motion, no external resources');

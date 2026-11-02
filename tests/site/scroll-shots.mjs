@@ -16,7 +16,7 @@ const at = (sel, off = 0) => `(() => { const el = document.querySelector(${JSON.
 const STOPS = {
   site: [['01-abertura', 'scrollTo(0,0)'], ['02-pergunta', at('#pergunta', 70)], ['03-como-antes', at('.scene[data-i="0"]', 330)], ['04-como-cifrado', at('.scene[data-i="3"]', 330)],
     ['05-protecao', at('#protecao', 70)], ['06-porque', at('#por-que', 70)], ['07-passo-1', at('.step-text[data-i="0"]', 330)], ['08-passo-4', at('.step-text[data-i="3"]', 330)],
-    ['09-prova', at('#prova', 70)], ['10-origem', at('#origem', 70)], ['11-baixar', at('#baixar', 70)]],
+    ['09-prova', at('#prova', 70)], ['11-baixar', at('#baixar', 70)]],
 };
 
 async function main() {

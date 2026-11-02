@@ -4,7 +4,7 @@ window.SITE_I18N = {
   pt: {
     lang: 'pt-BR',
     brand: 'IPsec Studio',
-    nav: { how: 'Como funciona', protects: 'Proteção', steps: 'Passo a passo', proof: 'Prova', origin: 'Origem', download: 'Baixar', github: 'GitHub', menu: 'Menu', top: 'Voltar ao topo' },
+    nav: { how: 'Como funciona', protects: 'Proteção', steps: 'Passo a passo', proof: 'Prova', download: 'Baixar', github: 'GitHub', menu: 'Menu', top: 'Voltar ao topo' },
     hero: {
       pill: 'Gratuito e aberto · IPsec nativo do Windows',
       title: 'Você sabe quem está usando a sua rede?',
@@ -120,21 +120,6 @@ window.SITE_I18N = {
         { value: '100+', label: 'testes automáticos antes de cada envio de código' },
       ],
     },
-    origin: {
-      eyebrow: 'Origem',
-      title: 'De onde vem o IPsec Studio',
-      timeline: [
-        { year: '2005', text: 'Universidade de Vila Velha: duas redes físicas viram uma só, com IPsec e sem custo adicional.' },
-        { year: '2006', text: 'Artigo no TechNet Brasil e artigo do mês do programa MVP da Microsoft.' },
-        { year: 'Hoje', text: 'IPsec Studio: o mesmo desenho, agora simples e seguro de adotar.' },
-      ],
-      paragraphs: [
-        'A pergunta do início desta página, “Você sabe quem está usando sua rede?”, abria um artigo de Rodrigo Immaginario publicado em setembro de 2006 no TechNet Brasil e, em inglês, como artigo do mês do programa MVP da Microsoft. O texto já tratava o firewall de borda como insuficiente e propunha autenticar cada máquina dentro da rede: Zero Trust aplicado à rede interna, anos antes de o termo se popularizar.',
-        'O desenho vinha de uma implantação real. Em 2005, a Universidade de Vila Velha, com 14 mil alunos, usou Server and Domain Isolation com IPsec para consolidar duas redes físicas, a dos alunos e a administrativa, em uma só, sem custo adicional de hardware ou software. O projeto, conduzido por Rodrigo como diretor de TI da universidade, virou estudo de caso da Microsoft.',
-        'Os perfis do IPsec Studio vêm daquele desenho: domínio isolado, isolamento sem retorno ao claro, isolamento com cifra, fronteira e exclusão. A quarentena foi acrescentada agora.',
-        'O IPsec continuou no Windows desde então. O que faltava era uma forma simples e segura de adotá-lo. É isso que o IPsec Studio entrega.',
-      ],
-    },
     download: {
       eyebrow: 'Baixar e contribuir',
       title: 'Grátis, aberto e feito para ser conferido',
@@ -158,8 +143,6 @@ window.SITE_I18N = {
       title: 'Para se aprofundar',
       noLink: 'sem link público',
       items: {
-        technetBr2006: { title: 'Você sabe quem está usando sua rede?', meta: 'Coluna do TechNet Brasil, 13 de setembro de 2006 (cópia arquivada)' },
-        mvp2006: { title: 'Do You Know Who Is Using Your Network?', meta: 'Artigo do mês MVP, Microsoft TechNet, setembro de 2006 (cópia arquivada, em inglês)' },
         case2006: { title: 'University Uses Existing Windows Investments to Tighten Network Security and Management', meta: 'Estudo de caso de cliente, 2006 (PDF, em inglês)' },
         msDomain: { title: 'Domain isolation policy design', meta: 'Documentação oficial da Microsoft (em inglês)' },
         msServer: { title: 'Server isolation policy design', meta: 'Documentação oficial da Microsoft (em inglês)' },
@@ -170,7 +153,7 @@ window.SITE_I18N = {
   en: {
     lang: 'en',
     brand: 'IPsec Studio',
-    nav: { how: 'How it works', protects: 'Protection', steps: 'Step by step', proof: 'Proof', origin: 'Origin', download: 'Download', github: 'GitHub', menu: 'Menu', top: 'Back to top' },
+    nav: { how: 'How it works', protects: 'Protection', steps: 'Step by step', proof: 'Proof', download: 'Download', github: 'GitHub', menu: 'Menu', top: 'Back to top' },
     hero: {
       pill: 'Free and open source · built-in Windows IPsec',
       title: 'Do you know who is using your network?',
@@ -286,21 +269,6 @@ window.SITE_I18N = {
         { value: '100+', label: 'automated tests before every code push' },
       ],
     },
-    origin: {
-      eyebrow: 'Origin',
-      title: 'Where IPsec Studio comes from',
-      timeline: [
-        { year: '2005', text: 'Universidade de Vila Velha: two physical networks become one, with IPsec and at no additional cost.' },
-        { year: '2006', text: 'Article on TechNet Brasil and Microsoft MVP Article of the Month.' },
-        { year: 'Today', text: 'IPsec Studio: the same design, now simple and safe to adopt.' },
-      ],
-      paragraphs: [
-        'The question at the top of this page, “Do you know who is using your network?”, opened an article by Rodrigo Immaginario published in September 2006 on TechNet Brasil and, in English, as the Microsoft MVP Article of the Month. It already treated the edge firewall as insufficient and proposed authenticating every machine inside the network: Zero Trust applied to the internal network, years before the term became popular.',
-        'The design came from a real deployment. In 2005, Universidade de Vila Velha, with 14,000 students, used Server and Domain Isolation with IPsec to consolidate two physical networks, the students’ and the administrative one, into one, at no additional hardware or software cost. The project, led by Rodrigo as the university’s CIO, became a Microsoft case study.',
-        'IPsec Studio profiles come from that design: isolated domain, no-fallback isolation, encryption isolation, boundary and exclusion. Quarantine is new.',
-        'IPsec has stayed in Windows ever since. What was missing was a simple, safe way to adopt it. That is what IPsec Studio delivers.',
-      ],
-    },
     download: {
       eyebrow: 'Download and contribute',
       title: 'Free, open and made to be checked',
@@ -324,8 +292,6 @@ window.SITE_I18N = {
       title: 'Further reading',
       noLink: 'no public link',
       items: {
-        technetBr2006: { title: 'Você sabe quem está usando sua rede?', meta: 'TechNet Brasil column, September 13, 2006 (archived copy, Portuguese)' },
-        mvp2006: { title: 'Do You Know Who Is Using Your Network?', meta: 'MVP Article of the Month, Microsoft TechNet, September 2006 (archived copy)' },
         case2006: { title: 'University Uses Existing Windows Investments to Tighten Network Security and Management', meta: 'Customer case study, 2006 (PDF)' },
         msDomain: { title: 'Domain isolation policy design', meta: 'Official Microsoft documentation' },
         msServer: { title: 'Server isolation policy design', meta: 'Official Microsoft documentation' },
