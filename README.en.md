@@ -2,6 +2,8 @@
 
 **Server and Domain Isolation with native Windows IPsec — plan, simulate, deploy and verify.**
 
+**Site:** https://rodrigoimmaginario.github.io/ipsec-studio/ · **Download:** [latest release](https://github.com/rodrigoimmaginario/ipsec-studio/releases/latest)
+
 [Versão em português](README.md)
 
 IPsec Studio turns the classic *Server and Domain Isolation* model (IPsec + Group Policy + Active Directory groups) into a guided workflow: describe **five protection profiles** over AD machine groups, see **what Windows will do with every connection** before touching the domain, generate the GPOs, apply them with your own administrator identity, verify the effective policy on the hosts and **compare real traffic with the simulation**. Everything happens at the network layer; no application changes and no firewall rules.
@@ -36,6 +38,8 @@ Each computer receives exactly **one profile GPO**: security-group filtering wit
 - Target hosts: Windows Vista/2008 or later (connection security rules). Tested on Windows Server 2022.
 
 ## Quick start
+
+Download the zip from the [latest release](https://github.com/rodrigoimmaginario/ipsec-studio/releases/latest), check its SHA-256 against the `.sha256` file published next to it and run `IpsecStudio.exe`. To build from source:
 
 ```powershell
 # publish (self-contained win-x64)

@@ -191,4 +191,16 @@ function load({ search = '', lang = null, reducedMotion = false } = {}) {
   assert.ok(/\.chip \{ animation: none; \}/.test(rm) && /\.js \.scene, \.js \.step-text \{ opacity: 1; \}/.test(rm), 'no floating chips, every scene readable');
 }
 
+// 7. Publication (CV3.DS5.TS1): a GitHub Pages workflow publishes only site/, on site changes in main, with minimal permissions.
+{
+  const wf = path.join(root, '..', '.github', 'workflows', 'pages.yml');
+  assert.ok(fs.existsSync(wf), 'pages workflow');
+  const y = fs.readFileSync(wf, 'utf8');
+  assert.match(y, /branches: \[main\]/, 'publishes from main');
+  assert.match(y, /paths: \['site\/\*\*'/, 'only when the site changes');
+  assert.match(y, /actions\/upload-pages-artifact@v\d+\n\s+with:\n\s+path: site\n/, 'uploads only the site folder');
+  assert.match(y, /actions\/deploy-pages@v\d+/, 'official deploy action');
+  assert.ok(/pages: write/.test(y) && /id-token: write/.test(y) && /contents: read/.test(y) && !/contents: write/.test(y), 'minimal permissions');
+}
+
 console.log('PASS site: PT/EN parity, opening (question first), scroll story of the diagram (before, 4 states, all), 5 steps with real screens, protection, benefits, why, proof numbers and limits, download, references, navigation, share metadata, reduced motion, no external resources');
