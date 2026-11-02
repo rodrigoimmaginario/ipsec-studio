@@ -1,4 +1,4 @@
-// Site smoke (CV3.DS5.US1): content parity PT/EN, three opening variants, one diagram with the four states, reduced motion,
+// Site smoke (CV3.DS5.US1): content parity PT/EN, four opening variants, one diagram with the four states, reduced motion,
 // URL parameters used in review sessions, and no external resources. Runs the real site scripts in a minimal fake DOM.
 import fs from 'node:fs';
 import path from 'node:path';
@@ -58,7 +58,8 @@ function load({ search = '', lang = null, reducedMotion = false } = {}) {
   const { pt, en } = ctx.SITE_I18N;
   const keys = (o, p = '') => Object.entries(o).flatMap(([k, v]) => (v && typeof v === 'object' && !Array.isArray(v) ? keys(v, p + k + '.') : [p + k]));
   assert.deepEqual(keys(en).sort(), keys(pt).sort(), 'PT and EN have the same keys');
-  assert.deepEqual(Object.keys(pt.variants).sort(), ['a', 'b', 'c'], 'three opening variants');
+  assert.deepEqual(Object.keys(pt.variants).sort(), ['a', 'b', 'c', 'd'], 'four opening variants');
+  assert.equal(pt.variants.d.title, 'Você sabe quem está usando a sua rede?', 'opening D comes from the 2006 article');
   assert.equal(pt.variants.a.title, 'Você conhece o IPsec — ou ainda se lembra dele?');
   assert.equal(pt.cta.download, 'Baixar grátis e colaborar com o projeto');
   const M = ctx.SITE_MODEL;
@@ -102,7 +103,8 @@ function load({ search = '', lang = null, reducedMotion = false } = {}) {
   assert.equal((els['protect-items'].innerHTML.match(/<li /g) || []).length, 6, 'risk cards rendered');
   assert.equal((els['benefit-items'].innerHTML.match(/<li>/g) || []).length, 6, 'benefits rendered');
   assert.ok(els['protect-featured'].innerHTML.includes('passe livre'), 'featured risk rendered');
-  assert.equal((els['ref-items'].innerHTML.match(/<li>/g) || []).length, 4, 'references rendered');
+  assert.equal((els['ref-items'].innerHTML.match(/<li>/g) || []).length, 5, 'references rendered');
+  assert.ok(els['ref-items'].innerHTML.includes('quemusa-rodrigo.mspx'), 'Portuguese 2006 column linked');
   assert.ok(els['ref-items'].innerHTML.includes('href="referencias/microsoft-case-study-uvv-ipsec-2006.pdf"'), 'case study PDF linked');
   assert.ok(fs.existsSync(path.join(root, 'referencias', 'microsoft-case-study-uvv-ipsec-2006.pdf')), 'case study PDF published with the site');
   // A blocked connection is drawn only up to its X: the line ends where the badge is, before the responder.
@@ -126,6 +128,7 @@ function load({ search = '', lang = null, reducedMotion = false } = {}) {
   const b = load({ search: '?v=b' });
   assert.equal(b.els.headline.textContent, 'E se o IPsec ainda fosse a melhor defesa que você não está usando?');
   assert.ok(b.els['proto-panel'].hidden, 'selector hidden outside prototype sessions');
+  assert.equal(load({ search: '?v=d' }).els.headline.textContent, 'Você sabe quem está usando a sua rede?', 'opening D selectable');
   const p = load({ search: '?v=c&prototipo' });
   assert.equal(p.els['proto-panel'].hidden, false, 'selector visible with ?prototipo');
   p.els['proto-a'].fire('click');
@@ -147,4 +150,4 @@ function load({ search = '', lang = null, reducedMotion = false } = {}) {
   assert.match(css, /svg\[data-motion="reduced"\] \.pulse \{ display: none; \}/, 'pulses hidden with reduced motion');
 }
 
-console.log('PASS site: PT/EN parity, 3 openings, one diagram with the 4 states and outside machines stopped, before/after, review params, reduced motion, no external resources');
+console.log('PASS site: PT/EN parity, 4 openings, one diagram with the 4 states and outside machines stopped, before/after, review params, reduced motion, no external resources');

@@ -8,7 +8,7 @@
   const LANG_KEY = 'ipsec-site-lang';
   const state = {
     lang: ['pt', 'en'].includes(params.get('lang')) ? params.get('lang') : (localStorage.getItem(LANG_KEY) === 'en' ? 'en' : 'pt'),
-    variant: ['a', 'b', 'c'].includes(params.get('v')) ? params.get('v') : 'a',
+    variant: ['a', 'b', 'c', 'd'].includes(params.get('v')) ? params.get('v') : 'a',
     mode: params.get('modo') === 'antes' ? 'before' : 'after',
   };
   const t = () => T[state.lang];
@@ -90,7 +90,7 @@
     $('lang-pt').setAttribute('aria-pressed', String(state.lang === 'pt'));
     $('lang-en').setAttribute('aria-pressed', String(state.lang === 'en'));
     $('cta-download').setAttribute('href', M.releases);
-    ['a', 'b', 'c'].forEach((v) => $('proto-' + v).setAttribute('aria-pressed', String(state.variant === v)));
+    ['a', 'b', 'c', 'd'].forEach((v) => $('proto-' + v).setAttribute('aria-pressed', String(state.variant === v)));
     renderDiagram();
   }
 
@@ -101,7 +101,7 @@
   const setLang = (l) => { state.lang = l; localStorage.setItem(LANG_KEY, l); render(); };
   $('lang-pt').addEventListener('click', () => setLang('pt'));
   $('lang-en').addEventListener('click', () => setLang('en'));
-  ['a', 'b', 'c'].forEach((v) => $('proto-' + v).addEventListener('click', () => { state.variant = v; render(); }));
+  ['a', 'b', 'c', 'd'].forEach((v) => $('proto-' + v).addEventListener('click', () => { state.variant = v; render(); }));
   $('proto-panel').hidden = !params.has('prototipo');
   render();
 })();

@@ -8,6 +8,7 @@ window.SITE_I18N = {
     variants: {
       a: { title: 'Você conhece o IPsec — ou ainda se lembra dele?', subtitle: 'Ele nunca saiu do seu Windows e continua sendo uma das defesas mais eficazes da rede interna. Agora, simples de adotar.' },
       b: { title: 'E se o IPsec ainda fosse a melhor defesa que você não está usando?', subtitle: 'Cada conexão autenticada, sem custo de licença, nativo no Windows. O IPsec Studio tira a complicação da implantação.' },
+      d: { title: 'Você sabe quem está usando a sua rede?', subtitle: 'Só as máquinas que você conhece deveriam chegar aos seus servidores. O IPsec do Windows garante isso há anos, e agora ficou simples de adotar.' },
       c: { title: 'Você ainda se lembra do IPsec? Ele ainda vale a pena.', subtitle: 'Zero Trust na sua rede interna, com o que já vem no Windows. Agora, sem complicação.' },
     },
     cta: { how: 'Veja como funciona', download: 'Baixar grátis e colaborar com o projeto' },
@@ -65,6 +66,7 @@ window.SITE_I18N = {
       title: 'Para se aprofundar',
       noLink: 'sem link público',
       items: {
+        technetBr2006: { title: 'Você sabe quem está usando sua rede?', meta: 'Coluna do TechNet Brasil, 13 de setembro de 2006 (cópia arquivada)' },
         mvp2006: { title: 'Do You Know Who Is Using Your Network?', meta: 'Artigo do mês MVP, Microsoft TechNet, setembro de 2006 (cópia arquivada, em inglês)' },
         case2006: { title: 'University Uses Existing Windows Investments to Tighten Network Security and Management', meta: 'Estudo de caso de cliente, 2006 (PDF, em inglês)' },
         msDomain: { title: 'Domain isolation policy design', meta: 'Documentação oficial da Microsoft (em inglês)' },
@@ -80,6 +82,7 @@ window.SITE_I18N = {
     variants: {
       a: { title: 'Do you know IPsec — or still remember it?', subtitle: 'It never left your Windows, and it is still one of the most effective defenses for the internal network. Now, simple to adopt.' },
       b: { title: 'What if IPsec were still the best defense you are not using?', subtitle: 'Every connection authenticated, no license cost, built into Windows. IPsec Studio takes the complexity out of deploying it.' },
+      d: { title: 'Do you know who is using your network?', subtitle: 'Only the machines you know should reach your servers. Windows IPsec has done this for years, and now it is simple to adopt.' },
       c: { title: 'Remember IPsec? It is still worth it.', subtitle: 'Zero Trust on your internal network, with what already ships in Windows. Now, without the hassle.' },
     },
     cta: { how: 'See how it works', download: 'Download free and contribute to the project' },
@@ -137,6 +140,7 @@ window.SITE_I18N = {
       title: 'Further reading',
       noLink: 'no public link',
       items: {
+        technetBr2006: { title: 'Você sabe quem está usando sua rede?', meta: 'TechNet Brasil column, September 13, 2006 (archived copy, Portuguese)' },
         mvp2006: { title: 'Do You Know Who Is Using Your Network?', meta: 'MVP Article of the Month, Microsoft TechNet, September 2006 (archived copy)' },
         case2006: { title: 'University Uses Existing Windows Investments to Tighten Network Security and Management', meta: 'Customer case study, 2006 (PDF)' },
         msDomain: { title: 'Domain isolation policy design', meta: 'Official Microsoft documentation' },
