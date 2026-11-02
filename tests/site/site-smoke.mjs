@@ -13,12 +13,14 @@ const html = read('index.html'), css = read('site.css'), i18n = read('i18n.js'),
 const refBlock = (model.match(/references: \[[\s\S]*?\n  \],/) || [''])[0];
 const refUrls = refBlock.match(/https:\/\/[^\s'"]+/g) || [];
 assert.ok(refUrls.every((u) => /^https:\/\/(learn\.microsoft\.com|web\.archive\.org)\//.test(u)), 'reference links only to Microsoft Learn or archived copies');
+const PAGES = 'https://rodrigoimmaginario.github.io/ipsec-studio/';
 for (const [name, text] of [['index.html', html], ['site.css', css], ['i18n.js', i18n], ['model.js', model.replace(refBlock, '')], ['site.js', site]]) {
   const urls = text.match(/https?:\/\/[^\s"'`)<]+/g) || [];
-  const foreign = urls.filter((u) => !u.startsWith('https://github.com/rodrigoimmaginario/ipsec-studio') && !u.startsWith('http://www.w3.org/2000/svg'));
+  // The Pages address appears only in share metadata (canonical, og:*), which browsers do not load.
+  const foreign = urls.filter((u) => !u.startsWith('https://github.com/rodrigoimmaginario/ipsec-studio') && !u.startsWith('http://www.w3.org/2000/svg') && !(name === 'index.html' && u.startsWith(PAGES)));
   assert.deepEqual(foreign, [], `${name} must not load external resources: ${foreign.join(', ')}`);
 }
-assert.ok(!/<script[^>]+src=["']https?:/i.test(html) && !/<link[^>]+href=["']https?:/i.test(html), 'no external scripts or styles');
+assert.ok(!/<script[^>]+src=["']https?:/i.test(html) && !/<link(?![^>]*rel="canonical")[^>]+href=["']https?:/i.test(html), 'no external scripts or styles');
 
 // 2. Fake DOM, just enough for site.js.
 function element(id) {
@@ -89,6 +91,42 @@ function load({ search = '', lang = null, reducedMotion = false } = {}) {
   }
   assert.ok(/RH/.test(pt.protects.featured.how) && /HR/.test(en.protects.featured.how), 'featured risk uses the HR database example');
   assert.ok(!('caseNote' in pt.benefits), 'no case quote in the benefits');
+
+  // US2: why almost nobody deployed it, five steps with real Studio screens, lab proof with limits, Origin, download.
+  for (const lang of [pt, en]) {
+    assert.equal(lang.why.items.length, 4, 'four real fears');
+    assert.equal(lang.steps.items.length, 5, 'five steps');
+    assert.ok(lang.steps.items.every((s) => s.title && s.text && s.alt), 'each step has title, text and image description');
+    assert.ok(lang.steps.sample, 'screens marked as sample data');
+    assert.ok(lang.proof.items.length >= 4 && lang.proof.limits.items.length >= 3, 'proof with stated limits');
+    assert.ok(lang.origin.paragraphs.length >= 3, 'origin story');
+    assert.ok(!/(NAP|Network Access Protection|Longhorn|3DES|MD5)/.test(JSON.stringify(lang.origin)), 'origin does not bring dated technology');
+    assert.ok(lang.download.requirements.length >= 3 && lang.download.verify && lang.download.contribute, 'download, verify and contribute');
+  }
+  assert.equal(pt.origin.title, 'Você sabe quem está usando sua rede?', 'origin opens with the 2006 question');
+  assert.ok(/14 mil/.test(pt.origin.paragraphs.join(' ')) && /14,000/.test(en.origin.paragraphs.join(' ')), 'origin cites the case numbers');
+  assert.ok(/duas redes/.test(pt.origin.paragraphs.join(' ')) && /sem custo adicional/.test(pt.origin.paragraphs.join(' ')), 'two networks into one at no additional cost');
+  assert.ok(/Zero Trust/.test(pt.origin.paragraphs.join(' ')) && !/renomead/.test(pt.origin.paragraphs.join(' ')), 'Zero Trust applied, not renamed');
+  const visible = JSON.stringify(pt);
+  assert.ok(!/drift/i.test(visible) && !/totalidade/i.test(visible), 'plain operator wording');
+}
+
+// 3b. Page order, share metadata, images.
+{
+  const order = ['how', 'protects', 'benefits', 'why', 'steps', 'proof', 'origin', 'download', 'references'];
+  const pos = order.map((id) => html.indexOf(`id="${id}"`));
+  assert.ok(pos.every((p) => p > 0) && pos.every((p, i) => i === 0 || p > pos[i - 1]), 'sections in the planned order');
+  for (const id of ['why', 'steps', 'proof', 'origin', 'download']) assert.ok(html.includes(`href="#${id}"`) || ['why'].includes(id), 'nav to ' + id);
+  assert.match(html, /<link rel="canonical" href="https:\/\/rodrigoimmaginario\.github\.io\/ipsec-studio\/">/, 'canonical');
+  for (const p of ['og:title', 'og:description', 'og:url', 'og:type']) assert.ok(html.includes(`property="${p}"`), p);
+  assert.match(html, /property="og:image" content="https:\/\/rodrigoimmaginario\.github\.io\/ipsec-studio\/img\/og\.png"/, 'og:image on Pages');
+  assert.match(html, /<link rel="icon" href="img\/favicon\.svg"/, 'local favicon');
+  const img = (f) => path.join(root, 'img', f);
+  const images = ['og.png', 'favicon.svg', ...[1, 2, 3, 4, 5].flatMap((n) => [`passo-${n}-pt.png`, `passo-${n}-en.png`])];
+  for (const f of images) {
+    assert.ok(fs.existsSync(img(f)), 'image ' + f);
+    assert.ok(fs.statSync(img(f)).size <= 300 * 1024, 'image under 300 KB: ' + f);
+  }
 }
 
 // 4. Default page: PT, variant A, the single diagram with the four states, no carousel.
@@ -107,6 +145,17 @@ function load({ search = '', lang = null, reducedMotion = false } = {}) {
   assert.ok(els['ref-items'].innerHTML.includes('quemusa-rodrigo.mspx'), 'Portuguese 2006 column linked');
   assert.ok(els['ref-items'].innerHTML.includes('href="referencias/microsoft-case-study-uvv-ipsec-2006.pdf"'), 'case study PDF linked');
   assert.ok(fs.existsSync(path.join(root, 'referencias', 'microsoft-case-study-uvv-ipsec-2006.pdf')), 'case study PDF published with the site');
+  assert.equal((els['why-items'].innerHTML.match(/<li>/g) || []).length, 4, 'fears rendered');
+  const steps = els['step-items'].innerHTML;
+  assert.equal((steps.match(/<li>/g) || []).length, 5, 'steps rendered');
+  for (const n of [1, 2, 3, 4, 5]) assert.ok(steps.includes(`src="img/passo-${n}-pt.png"`), 'step image ' + n);
+  assert.ok(/<img [^>]*alt="[^"]{10,}"/.test(steps) && steps.includes('loading="lazy"'), 'step images described and lazy');
+  assert.ok(els['proof-items'].innerHTML.includes('<li>') && els['proof-limits'].innerHTML.includes('<li>'), 'proof and limits rendered');
+  assert.ok(els['origin-text'].innerHTML.includes('14 mil') && els['origin-text'].innerHTML.includes('<p>'), 'origin rendered');
+  assert.ok(els['req-items'].innerHTML.includes('<li>'), 'requirements rendered');
+  assert.equal(els['dl-release'].getAttribute('href'), 'https://github.com/rodrigoimmaginario/ipsec-studio/releases/latest');
+  assert.equal(els['dl-install'].getAttribute('href'), 'https://github.com/rodrigoimmaginario/ipsec-studio/blob/main/docs/pt-br/instalacao.md');
+  assert.equal(els['dl-contribute'].getAttribute('href'), 'https://github.com/rodrigoimmaginario/ipsec-studio/blob/main/CONTRIBUTING.md');
   // A blocked connection is drawn only up to its X: the line ends where the badge is, before the responder.
   const blocked = [...d.matchAll(/<g class="link refused"[^>]*><path class="track" d="[^"]* ([\d.]+) ([\d.]+)"\/>.*?<circle cx="([\d.]+)" cy="([\d.]+)"/g)];
   assert.equal(blocked.length, 2, "both blocked flows found");
@@ -138,6 +187,8 @@ function load({ search = '', lang = null, reducedMotion = false } = {}) {
   assert.ok(en.els.diagram.innerHTML.includes('data-mode="before"'), 'review param opens the before view');
   const stored = load({ lang: 'en' });
   assert.ok(stored.els.diagram.innerHTML.includes('outside the domain'), 'remembered language in the diagram');
+  assert.ok(stored.els['step-items'].innerHTML.includes('src="img/passo-1-en.png"'), 'English screens in English');
+  assert.equal(stored.els['dl-install'].getAttribute('href'), 'https://github.com/rodrigoimmaginario/ipsec-studio/blob/main/docs/en/install.md');
   stored.els['lang-pt'].fire('click');
   assert.equal(stored.store.get('ipsec-site-lang'), 'pt');
   assert.equal(stored.els.headline.textContent, 'Você conhece o IPsec — ou ainda se lembra dele?');
@@ -150,4 +201,4 @@ function load({ search = '', lang = null, reducedMotion = false } = {}) {
   assert.match(css, /svg\[data-motion="reduced"\] \.pulse \{ display: none; \}/, 'pulses hidden with reduced motion');
 }
 
-console.log('PASS site: PT/EN parity, 4 openings, one diagram with the 4 states and outside machines stopped, before/after, review params, reduced motion, no external resources');
+console.log('PASS site: PT/EN parity, 4 openings, one diagram with the 4 states, protection, benefits, why, 5 steps with real screens, lab proof with limits, origin, download, references, share metadata, reduced motion, no external resources');

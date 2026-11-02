@@ -41,5 +41,10 @@ window.SITE_MODEL = {
     { id: 'msServer', author: 'Microsoft Learn', url: 'https://learn.microsoft.com/en-us/windows/security/operating-system-security/network-security/windows-firewall/server-isolation-policy-design' },
   ],
   releases: 'https://github.com/rodrigoimmaginario/ipsec-studio/releases/latest',
+  docs: {
+    pt: { install: 'https://github.com/rodrigoimmaginario/ipsec-studio/blob/main/docs/pt-br/instalacao.md', tests: 'https://github.com/rodrigoimmaginario/ipsec-studio/blob/main/docs/pt-br/tdd.md' },
+    en: { install: 'https://github.com/rodrigoimmaginario/ipsec-studio/blob/main/docs/en/install.md', tests: 'https://github.com/rodrigoimmaginario/ipsec-studio/blob/main/docs/en/tdd.md' },
+  },
+  contributing: 'https://github.com/rodrigoimmaginario/ipsec-studio/blob/main/CONTRIBUTING.md',
   repository: 'https://github.com/rodrigoimmaginario/ipsec-studio',
 };

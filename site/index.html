@@ -4,8 +4,18 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; base-uri 'none'; form-action 'none'">
-  <title>IPsec Studio</title>
-  <meta name="description" content="IPsec Studio: isolamento de rede interna com o IPsec nativo do Windows. Planejar, simular, aplicar aos poucos, verificar e voltar atrás.">
+  <title>IPsec Studio — isolamento da rede interna com o IPsec do Windows</title>
+  <meta name="description" content="IPsec Studio: isolamento da rede interna com o IPsec nativo do Windows. Planejar, simular, aplicar aos poucos, verificar e voltar atrás. Grátis e aberto.">
+  <link rel="canonical" href="https://rodrigoimmaginario.github.io/ipsec-studio/">
+  <link rel="icon" href="img/favicon.svg" type="image/svg+xml">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://rodrigoimmaginario.github.io/ipsec-studio/">
+  <meta property="og:title" content="IPsec Studio — o IPsec do Windows, agora simples de adotar">
+  <meta property="og:description" content="Cada conexão da rede interna autenticada e, onde importa, cifrada. Sem licença, sem agente. Planejar, simular, aplicar em ondas, verificar e voltar atrás.">
+  <meta property="og:image" content="https://rodrigoimmaginario.github.io/ipsec-studio/img/og.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta name="twitter:card" content="summary_large_image">
   <link rel="stylesheet" href="site.css">
 </head>
 <body>
@@ -14,6 +24,10 @@
     <nav>
       <a href="#how" data-i18n="nav.how">Como funciona</a>
       <a href="#protects" data-i18n="nav.protects">Proteção</a>
+      <a href="#steps" data-i18n="nav.steps">Passo a passo</a>
+      <a href="#proof" data-i18n="nav.proof">Prova</a>
+      <a href="#origin" data-i18n="nav.origin">Origem</a>
+      <a href="#download" data-i18n="nav.download">Baixar</a>
       <a href="https://github.com/rodrigoimmaginario/ipsec-studio" data-i18n="nav.github">GitHub</a>
       <span class="lang"><button type="button" id="lang-pt" aria-label="Português">PT</button><span aria-hidden="true">·</span><button type="button" id="lang-en" aria-label="English">EN</button></span>
     </nav>
@@ -68,6 +82,63 @@
       <p class="eyebrow" data-i18n="benefits.eyebrow">Por que vale a pena</p>
       <h2 data-i18n="benefits.title"></h2>
       <ul class="benefit-list" id="benefit-items"></ul>
+    </section>
+
+    <section class="why" id="why">
+      <p class="eyebrow" data-i18n="why.eyebrow"></p>
+      <h2 data-i18n="why.title"></h2>
+      <p class="intro" data-i18n="why.intro"></p>
+      <ul class="fears" id="why-items"></ul>
+    </section>
+
+    <section class="steps" id="steps">
+      <p class="eyebrow" data-i18n="steps.eyebrow"></p>
+      <h2 data-i18n="steps.title"></h2>
+      <p class="intro" data-i18n="steps.intro"></p>
+      <ol class="step-list" id="step-items"></ol>
+      <p class="sample" data-i18n="steps.sample"></p>
+    </section>
+
+    <section class="proof" id="proof">
+      <p class="eyebrow" data-i18n="proof.eyebrow"></p>
+      <h2 data-i18n="proof.title"></h2>
+      <p class="intro" data-i18n="proof.intro"></p>
+      <div class="proof-grid">
+        <ul class="checks" id="proof-items"></ul>
+        <div class="limits">
+          <b data-i18n="proof.limits.title"></b>
+          <ul id="proof-limits"></ul>
+        </div>
+      </div>
+      <p><a class="more" id="proof-more" href="#" data-i18n="proof.more"></a></p>
+    </section>
+
+    <section class="origin" id="origin">
+      <p class="eyebrow" data-i18n="origin.eyebrow"></p>
+      <h2 data-i18n="origin.title"></h2>
+      <div class="origin-text" id="origin-text"></div>
+    </section>
+
+    <section class="download" id="download">
+      <p class="eyebrow" data-i18n="download.eyebrow"></p>
+      <h2 data-i18n="download.title"></h2>
+      <div class="download-grid">
+        <div>
+          <h3 data-i18n="download.requirementsTitle"></h3>
+          <ul class="checks" id="req-items"></ul>
+          <p class="verify-text" data-i18n="download.verify"></p>
+          <code class="verify" data-i18n="download.verifyCmd"></code>
+          <div class="cta">
+            <a class="btn primary" id="dl-release" href="#" data-i18n="download.release"></a>
+            <a class="btn ghost" id="dl-install" href="#" data-i18n="download.install"></a>
+          </div>
+        </div>
+        <div class="contribute">
+          <h3 data-i18n="download.contributeTitle"></h3>
+          <p data-i18n="download.contribute"></p>
+          <p><a class="more" id="dl-contribute" href="#" data-i18n="download.contributeLink"></a> · <span data-i18n="download.license"></span></p>
+        </div>
+      </div>
     </section>
 
     <section class="references" id="references">

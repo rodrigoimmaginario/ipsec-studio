@@ -85,6 +85,17 @@
       const title = r.url ? `<a href="${esc(r.url)}" rel="noopener">${esc(t.title)}</a>` : `<span>${esc(t.title)} <em>(${esc(L.references.noLink)})</em></span>`;
       return `<li>${title}<small>${esc(r.author)} · ${esc(t.meta)}</small></li>`;
     }).join('');
+    const li = (arr) => arr.map((x) => `<li>${esc(x)}</li>`).join('');
+    $('why-items').innerHTML = L.why.items.map((w) => `<li><b>${esc(w.title)}</b><p>${esc(w.text)}</p></li>`).join('');
+    $('step-items').innerHTML = L.steps.items.map((s, i) => `<li><div class="step-text"><span class="step-n">${i + 1}</span><h3>${esc(s.title)}</h3><p>${esc(s.text)}</p></div><img src="img/passo-${i + 1}-${state.lang}.png" alt="${esc(s.alt)}" loading="lazy" width="1280" height="800"></li>`).join('');
+    $('proof-items').innerHTML = li(L.proof.items);
+    $('proof-limits').innerHTML = li(L.proof.limits.items);
+    $('origin-text').innerHTML = L.origin.paragraphs.map((p) => `<p>${esc(p)}</p>`).join('');
+    $('req-items').innerHTML = li(L.download.requirements);
+    $('dl-release').setAttribute('href', M.releases);
+    $('dl-install').setAttribute('href', M.docs[state.lang].install);
+    $('proof-more').setAttribute('href', M.docs[state.lang].tests);
+    $('dl-contribute').setAttribute('href', M.contributing);
     $('benefit-items').innerHTML = L.benefits.items.map((b) => `<li><b>${esc(b.title)}</b><p>${esc(b.text)}</p></li>`).join('');
     $('btn-before').textContent = L.controls.before; $('btn-after').textContent = L.controls.after;
     $('lang-pt').setAttribute('aria-pressed', String(state.lang === 'pt'));
