@@ -8,8 +8,9 @@
   const params = new URLSearchParams(location.search);
   const reduced = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
   const LANG_KEY = 'ipsec-site-lang';
+  const rememberedLanguage = () => { try { return localStorage.getItem(LANG_KEY) === 'en' ? 'en' : 'pt'; } catch { return 'pt'; } };
   const state = {
-    lang: ['pt', 'en'].includes(params.get('lang')) ? params.get('lang') : (localStorage.getItem(LANG_KEY) === 'en' ? 'en' : 'pt'),
+    lang: ['pt', 'en'].includes(params.get('lang')) ? params.get('lang') : rememberedLanguage(),
     scene: null, step: 0,
   };
   const t = () => T[state.lang];
@@ -175,7 +176,7 @@
   }, { passive: true });
 
   // ---------- behaviour ----------
-  const setLang = (l) => { state.lang = l; localStorage.setItem(LANG_KEY, l); render(); };
+  const setLang = (l) => { state.lang = l; try { localStorage.setItem(LANG_KEY, l); } catch { /* Storage is optional; rendering and language switching are not. */ } render(); };
   $('lang-pt').addEventListener('click', () => setLang('pt'));
   $('lang-en').addEventListener('click', () => setLang('en'));
   const closeMenu = () => { $('sheet').hidden = true; $('menu').setAttribute('aria-expanded', 'false'); };

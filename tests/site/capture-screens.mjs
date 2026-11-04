@@ -14,12 +14,13 @@ const here = path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z
 const repo = path.resolve(here, '..', '..');
 const wwwroot = path.join(repo, 'app', 'IpsecStudio', 'wwwroot');
 const site = path.join(repo, 'site');
+const VERSION = fs.readFileSync(path.join(repo, 'app/IpsecStudio/IpsecStudio.csproj'), 'utf8').match(/<Version>([^<]+)<\/Version>/)[1];
 const out = path.join(site, 'img');
 const EDGE = process.env.EDGE || 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe';
 const PORT = 5181;
 
 // ---------- sample directory (lab format) ----------
-const D = 'S-1-5-21-3623811015-3361044348-30300820';
+const D = 'S-1-5-21-11-22-33';
 const sid = (n) => `${D}-${n}`;
 const pc = (id, kind, ip, os, n) => ({ id, name: id, kind, ip, os, sid: sid(n), dn: `CN=${id},CN=Computers,DC=lab,DC=ipsec,DC=test`, parentDn: 'CN=Computers,DC=lab,DC=ipsec,DC=test', memberIds: [], unresolvedMemberCount: 0 });
 const grp = (id, name, members, n) => ({ id, name, kind: 'group', sid: n === 515 ? `${D}-515` : sid(n), memberIds: members, dn: `CN=${name},OU=IPsec,DC=lab,DC=ipsec,DC=test`, parentDn: 'OU=IPsec,DC=lab,DC=ipsec,DC=test', unresolvedMemberCount: 0 });
@@ -149,8 +150,8 @@ const server = http.createServer((req, res) => {
   if (p === '/__og.css') { res.writeHead(200, { 'Content-Type': mime['.css'] }); return res.end(OG_CSS); }
   if (p === '/__plan') { const lg = url.searchParams.get('lang') === 'en' ? 'en' : 'pt'; const d = draft(lg);
     return json(res, { draft: d, saved: { id: '7c1e2a90-4b1d-4f6a-9d0e-2a5b8c3f1e77', version: 3, name: T[lg].plan, inventory }, log: log(lg), compilation, approval: T[lg].approval, verify, probe, drift: { clean: true, gpos: compilation.gpos.map((g) => ({ name: g.name, exists: true, differences: [] })), external: [], utc: '2026-10-30T19:40:00Z' } }); }
-  if (p === '/api/status') return json(res, { version: '0.4.0', identity: 'LAB\\laboperator', host: 'admin1', domain: 'lab.ipsec.test', token: 't', inventory, deploymentEnabled: true, probePort: 5985 });
-  if (p === '/api/plans/simulate') return json(res, { assessment: assessment(lang), matrix: matrix(lang), wave: 0, waveHosts: assessment(lang).hosts });
+  if (p === '/api/status') return json(res, { version: VERSION, identity: 'LAB\\laboperator', host: 'admin1', domain: 'lab.ipsec.test', token: 't', inventory, deploymentEnabled: true, probePort: 5985 });
+  if (p === '/api/plans/simulate') return json(res, { assessment: assessment(lang), matrix: matrix(lang), matrixIds, matrixLimit: 30, wave: 0, waveHosts: assessment(lang).hosts });
   if (p.startsWith('/api/')) return json(res, []);
   const base = p.startsWith('/site/') ? site : wwwroot;
   let file = path.join(base, decodeURIComponent(p.replace(/^\/site/, '')));

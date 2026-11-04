@@ -19,6 +19,8 @@ const refUrls = refBlock.match(/https:\/\/[^\s'"]+/g) || [];
 assert.ok(refUrls.length > 0 && refUrls.every((u) => /^https:\/\/learn\.microsoft\.com\//.test(u)), 'reference links only to official Microsoft Learn pages');
 assert.ok(!/web\.archive\.org/.test(html + model + i18n + site), 'no web cache links');
 const PAGES = 'https://rodrigoimmaginario.github.io/ipsec-studio/';
+const version = fs.readFileSync(path.join(root, '..', 'app/IpsecStudio/IpsecStudio.csproj'), 'utf8').match(/<Version>([^<]+)<\/Version>/)[1];
+const RELEASE = `https://github.com/rodrigoimmaginario/ipsec-studio/releases/tag/v${version}`;
 for (const [name, text] of [['index.html', html], ['site.css', css], ['i18n.js', i18n], ['model.js', model.replace(refBlock, '')], ['site.js', site]]) {
   const urls = text.match(/https?:\/\/[^\s"'`)<]+/g) || [];
   const foreign = urls.filter((u) => !u.startsWith('https://github.com/rodrigoimmaginario/ipsec-studio') && !u.startsWith('http://www.w3.org/2000/svg') && !(name === 'index.html' && u.startsWith(PAGES)));
@@ -39,7 +41,7 @@ function element(id) {
     querySelectorAll() { return []; }, focus() {},
   };
 }
-function load({ search = '', lang = null, reducedMotion = false } = {}) {
+function load({ search = '', lang = null, reducedMotion = false, storageUnavailable = false } = {}) {
   const els = {};
   for (const m of html.matchAll(/<[^>]*\sid="([^"]+)"[^>]*>/g)) { els[m[1]] = element(m[1]); els[m[1]].hidden = /\shidden[\s>]/.test(m[0]); }
   const store = new Map(lang ? [['ipsec-site-lang', lang]] : []);
@@ -47,7 +49,7 @@ function load({ search = '', lang = null, reducedMotion = false } = {}) {
   const ctx = {
     console, URLSearchParams,
     location: { search },
-    localStorage: { getItem: (k) => store.get(k) ?? null, setItem: (k, v) => store.set(k, String(v)) },
+    localStorage: { getItem: (k) => { if(storageUnavailable) throw new Error('Storage blocked'); return store.get(k) ?? null; }, setItem: (k, v) => { if(storageUnavailable) throw new Error('Storage blocked'); store.set(k, String(v)); } },
     matchMedia: (q) => ({ matches: q.includes('reduce') ? reducedMotion : false, addEventListener() {} }),
     setInterval: (fn, ms) => { timers.push({ fn, ms }); return timers.length; }, clearInterval() {},
     addEventListener() {}, scrollTo() {}, scrollY: 0, innerHeight: 900,
@@ -73,6 +75,17 @@ function load({ search = '', lang = null, reducedMotion = false } = {}) {
   assert.equal(pt.cta.download, 'Baixar grátis e colaborar com o projeto');
   assert.equal(pt.voice.questions.length, 3, 'three questions from the people who run the network');
   const M = ctx.SITE_MODEL;
+  assert.equal(M.releases, RELEASE, 'download points to the explicitly described release');
+  for (const lang of [pt, en]) {
+    assert.ok(lang.download.release.includes(version), 'download names its version');
+    assert.equal(lang.proof.stats[3].value, '151', 'current Windows local test count');
+    assert.ok(/não determinad|indeterminate/i.test(lang.steps.items[2].text), 'prediction discloses unknown outcomes');
+    assert.ok(/revis|revision/i.test(lang.steps.items[3].text), 'recovery is tied to a revision');
+    assert.ok(!/sempre disponível|always available/i.test(lang.chips.rollback + lang.steps.items[3].text), 'no unconditional rollback promise');
+    assert.ok(/associa|association/i.test(lang.proof.items[3]), 'ESP is not presented as encryption proof');
+    assert.ok(/produção|production/i.test(lang.download.contribute), 'production limit stays visible');
+    assert.ok(lang.proof.limits.items.some(s => /failover|interrup|interrupt/i.test(s)), 'failover is not a seamless SLA');
+  }
   assert.deepEqual([...M.states], ['refused', 'auth', 'enc', 'boundary'], 'four states');
   for (const lang of [pt, en]) {
     for (const k of M.states) assert.ok(lang.states[k].title && lang.states[k].text, 'state text ' + k);
@@ -158,8 +171,8 @@ function load({ search = '', lang = null, reducedMotion = false } = {}) {
   assert.ok(els['proof-limits'].innerHTML.includes('<li>'), 'proof limits');
   assert.equal((els['ref-items'].innerHTML.match(/<li>/g) || []).length, 3, 'references');
   assert.ok(els['ref-items'].innerHTML.includes('href="referencias/microsoft-case-study-uvv-ipsec-2006.pdf"'), 'case study published with the site');
-  assert.equal(els['dl-release'].getAttribute('href'), 'https://github.com/rodrigoimmaginario/ipsec-studio/releases/latest');
-  assert.equal(els['cta-download'].getAttribute('href'), 'https://github.com/rodrigoimmaginario/ipsec-studio/releases/latest');
+  assert.equal(els['dl-release'].getAttribute('href'), RELEASE);
+  assert.equal(els['cta-download'].getAttribute('href'), RELEASE);
   assert.equal(els['dl-install'].getAttribute('href'), 'https://github.com/rodrigoimmaginario/ipsec-studio/blob/main/docs/pt-br/instalacao.md');
   assert.equal(els['dl-contribute'].getAttribute('href'), 'https://github.com/rodrigoimmaginario/ipsec-studio/blob/main/CONTRIBUTING.md');
   assert.equal(timers.length, 0, 'no carousel timer');
@@ -170,6 +183,10 @@ function load({ search = '', lang = null, reducedMotion = false } = {}) {
 
 // 5. Language: parameter, remembered choice, switch.
 {
+  const blocked = load({ storageUnavailable: true });
+  assert.ok(blocked.els['hero-title'].textContent.includes('Você sabe'), 'blocked storage does not blank the site');
+  blocked.els['lang-en'].fire('click');
+  assert.equal(blocked.els['hero-title'].textContent, 'Do you know who is using your network?', 'language still switches without storage');
   const en = load({ search: '?lang=en' });
   assert.equal(en.els['hero-title'].textContent, 'Do you know who is using your network?');
   assert.equal(en.els['hero-shot'].getAttribute('src'), 'img/passo-3-en.png');
@@ -181,6 +198,9 @@ function load({ search = '', lang = null, reducedMotion = false } = {}) {
   assert.equal(stored.store.get('ipsec-site-lang'), 'pt');
   assert.equal(stored.els['hero-title'].textContent, 'Você sabe quem está usando a sua rede?');
 }
+
+// The decorative hero glow must not enlarge the mobile layout viewport (real Edge: 390 became 429).
+assert.match(css, /\.hero::before\s*\{[^}]*inset:\s*-40px 0 auto 42%/, 'hero decoration stays within the page');
 
 // 6. Reduced motion: the diagram is static, scenes and steps stay readable, nothing floats.
 {

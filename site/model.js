@@ -38,7 +38,7 @@ window.SITE_MODEL = {
     { id: 'msDomain', author: 'Microsoft Learn', url: 'https://learn.microsoft.com/en-us/previous-versions/windows/it-pro/windows-server-2008-r2-and-2008/cc725818(v=ws.10)' },
     { id: 'msServer', author: 'Microsoft Learn', url: 'https://learn.microsoft.com/en-us/previous-versions/windows/it-pro/windows-server-2012-r2-and-2012/jj721528(v=ws.11)' },
   ],
-  releases: 'https://github.com/rodrigoimmaginario/ipsec-studio/releases/latest',
+  releases: 'https://github.com/rodrigoimmaginario/ipsec-studio/releases/tag/v0.5.0',
   docs: {
     pt: { install: 'https://github.com/rodrigoimmaginario/ipsec-studio/blob/main/docs/pt-br/instalacao.md', tests: 'https://github.com/rodrigoimmaginario/ipsec-studio/blob/main/docs/pt-br/tdd.md' },
     en: { install: 'https://github.com/rodrigoimmaginario/ipsec-studio/blob/main/docs/en/install.md', tests: 'https://github.com/rodrigoimmaginario/ipsec-studio/blob/main/docs/en/tdd.md' },
