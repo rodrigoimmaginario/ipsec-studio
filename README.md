@@ -6,7 +6,7 @@
 
 [English version](README.en.md)
 
-IPsec Studio transforma o modelo clássico de *Server and Domain Isolation* (IPsec + Group Policy + grupos do Active Directory) em um fluxo guiado: você descreve **cinco perfis de proteção** sobre grupos de máquinas do AD, vê **o que o Windows fará com cada conexão** antes de tocar no domínio, gera as GPOs, aplica com a sua própria identidade de administrador, verifica a política efetiva nos hosts e **compara o tráfego real com a simulação**. Tudo na camada de rede; nenhuma aplicação é alterada e nenhuma regra de firewall é criada.
+IPsec Studio transforma o modelo clássico de *Server and Domain Isolation* (IPsec + Group Policy + grupos do Active Directory) em um fluxo guiado: você descreve **cinco perfis de proteção** sobre grupos de máquinas do AD, vê **o resultado previsto da política para novas negociações**, com situações não determinadas explícitas antes de tocar no domínio, gera as GPOs, aplica com a sua própria identidade de administrador, verifica a política efetiva nos hosts e **compara o tráfego real com a simulação**. Tudo na camada de rede; nenhuma aplicação é alterada e nenhuma regra de firewall é criada.
 
 ![Simulação: o que o Windows fará com cada conexão nova](docs/images/simulation.png)
 
@@ -16,11 +16,11 @@ IPsec Studio transforma o modelo clássico de *Server and Domain Isolation* (IPs
 |---|---|---|
 | 1 | **Servidores restritos** | Só o grupo de acesso estabelece SA; sem fallback em claro; cifra ESP opcional |
 | 2 | **Base autenticada** | Domínio isolado: entrada exige IPsec (Kerberos de máquina, ESP/null), saída solicita |
-| 3 | **Sem IPsec** | Computadores sem política e endereços isentos (impressoras, WSUS, firewalls) tratados em claro por todos |
+| 3 | **Sem IPsec** | Não recebe GPO de perfil; isso não o isenta das exigências dos demais hosts. Isenções por endereço são configuração separada |
 | 4 | **Fronteira** | Aceita entrada em claro de pares sem IPsec e negocia com os que souberem |
-| 5 | **Quarentena** | Exige IPsec na entrada e só autoriza o grupo de gestão; os demais recusam conexões vindas dela — basta adicionar a máquina ao grupo |
+| 5 | **Quarentena** | Exige IPsec na entrada e autoriza gestão; hosts protegidos a recusam, sujeitos a isenções por endereço e estado em cache. Firewall/EDR continuam necessários |
 
-Cada computador recebe exatamente **uma GPO de perfil**: filtragem por grupo de segurança com *Deny Apply* para os demais perfis. A autorização de máquinas fica na **lista de autorização IPsec de transporte** (Allow para o grupo de acesso, Deny para o grupo de exclusão), decidida por quem recebe a conexão.
+Cada computador gerenciado e elegível recebe **uma GPO de perfil**; fora do alcance, DCs e Sem IPsec não recebem: filtragem por grupo de segurança com *Deny Apply* para os demais perfis. A autorização de máquinas fica na **lista de autorização IPsec de transporte** (Allow para o grupo de acesso, Deny para o grupo de exclusão), decidida por quem recebe a conexão.
 
 ## Fluxo
 
@@ -35,9 +35,11 @@ Cada computador recebe exatamente **uma GPO de perfil**: filtragem por grupo de 
 
 - Windows Server 2016+ ou Windows 10/11 ingressado no domínio, com RSAT (módulos `ActiveDirectory`, `GroupPolicy`, `NetSecurity`).
 - Conta com permissão para criar e vincular GPOs no escopo escolhido e com acesso WinRM aos hosts (para atualizar, verificar e sondar).
-- Hosts alvo: Windows Vista/2008 ou posterior (regras de segurança de conexão). Testado em Windows Server 2022.
+- Hosts do fluxo automatizado: PowerShell 5.1, WinRM, NetSecurity e ScheduledTasks; captura exige também ferramentas compatíveis (`netsh`/`pktmon`). Testado em Windows Server 2022 e Windows 10/11. O mecanismo IPsec existir desde Vista/2008 não significa que esses sistemas foram homologados pelo Studio.
 
 ## Início rápido
+
+> **v0.5.0 — confiabilidade:** recuperação por revisão, diário de associações próprias, verificação completa e primeiro uso somente leitura. [Notas e cuidados de atualização](docs/release-notes/0.5.0.md). Validado em laboratório; ainda não recomendamos produção sem piloto na sua rede.
 
 Baixe o zip da [última versão](https://github.com/rodrigoimmaginario/ipsec-studio/releases/latest), confira o SHA-256 com o arquivo `.sha256` publicado junto e execute `IpsecStudio.exe`. Para gerar a partir do código:
 
@@ -49,7 +51,9 @@ artifacts\app\IpsecStudio.exe
 # abrir http://127.0.0.1:5090/
 ```
 
-O serviço escuta apenas em `127.0.0.1` e usa a identidade Windows de quem o executa — como o GPMC. Não publique a porta nem o execute como serviço compartilhado.
+Comece com **Conferir pré-requisitos**, confirme o domínio e planeje em modo somente leitura. Para implantar, edite `Deployment:Enabled` para `true`, reinicie e use um grupo/OU de piloto — Domain Computers na raiz é alcance amplo.
+
+O serviço escuta apenas em `127.0.0.1` e exige a mesma identidade Windows de quem o executa (Negotiate + SID). Não publique a porta nem o execute como serviço compartilhado.
 
 ## Documentação
 
@@ -57,6 +61,8 @@ O serviço escuta apenas em `127.0.0.1` e usa a identidade Windows de quem o exe
 - [Instalação e configuração](docs/pt-br/instalacao.md)
 - [Guia de uso](docs/pt-br/uso.md)
 - [Modelo de segurança e limites](docs/pt-br/seguranca.md)
+- [Recuperação e reversão](docs/pt-br/recuperacao.md)
+- [Relatar vulnerabilidades](SECURITY.md)
 - [Guia de TDD](docs/pt-br/tdd.md)
 
 Idioma da interface: português (padrão) ou inglês, selecionável no cabeçalho; a escolha é lembrada.

@@ -7,6 +7,7 @@ namespace IpsecStudio;
 public sealed record DeployRequest(string PlanId, int Version, string Hash, string Action, string? Approval = null) {
     // Drift (edited Studio GPOs or external IPsec GPOs) blocks apply/rollback unless the operator acknowledges it explicitly.
     public bool AcknowledgeDrift { get; init; }
+    public bool AcknowledgeScope { get; init; }
 }
 public sealed record HostRequest(string PlanId, int Version, string Action, string[]? ComputerIds = null) {
     // Probe only: capture packets on the responders while probing (NDIS trace), keep counts, delete the capture.
@@ -15,12 +16,15 @@ public sealed record HostRequest(string PlanId, int Version, string Action, stri
 public sealed record WaveRequest(string PlanId, int Version, string WaveId, string Action, string? Approval = null);
 public sealed record DeploymentRecord(DateTimeOffset Utc, string Identity, string PlanId, int Version, string Hash, string Action, bool Succeeded, string Output) {
     public string? Approval { get; init; }
+    public bool InProgress { get; init; }
     public string? WaveId { get; init; }
+    public string[] Blockers { get; init; } = [];
     public bool? ExpansionAllowed { get; init; }
     // DCs that did not confirm the change within the replication wait ("timeout"/"unreachable"): hosts using them may keep old policy.
     public string[] PendingDcs { get; init; } = [];
 }
 public sealed record WaveResult(string WaveId, string WaveName, bool Succeeded, bool ExpansionAllowed, string Output, HostResult[] Verify, ProbeResult[] Probe) {
+    public string[] Blockers { get; init; } = [];
     public string[] PendingDcs { get; init; } = [];
 }
 public sealed record HostResult(string Host, bool Reachable, string Output) {
@@ -31,6 +35,7 @@ public sealed record HostResult(string Host, bool Reachable, string Output) {
 }
 public sealed record ProbeResult(string Initiator, string Responder, string Expected, string Observed, bool Match, string Detail) {
     public WireObservation? Wire { get; init; }
+    public bool Conclusive { get; init; } = true;
 }
 
 // Executes compiled scripts under the identity of the user running IPsec Studio (like GPMC). No service account, no stored secrets.
@@ -59,21 +64,31 @@ public sealed class Deployment(IConfiguration config, PlanRepository repository,
         if (request.Action is "apply" or "groups" && string.IsNullOrWhiteSpace(request.Approval)) throw new ValidationException(L.T("deploy.approval"));
         await gate.WaitAsync();
         try {
-            var plan = await repository.Get(request.PlanId) ?? throw new ValidationException(L.T("deploy.planNotFound"));
+            var plan = await repository.Get(request.PlanId, request.Action == "rollback" ? request.Version : null) ?? throw new ValidationException(L.T("deploy.planNotFound"));
             if (plan.Version != request.Version) throw new ConflictException(L.T("deploy.stale"));
-            string script, hash;
+            string script, hash; Compilation? compilation = null;
             if (request.Action == "groups") { var g = Compiler.CompileGroups(plan); script = g.ApplyScript; hash = g.Sha256; }
-            else { var c = Compiler.Compile(plan); script = request.Action == "apply" ? c.ApplyScript : c.RollbackScript; hash = c.Sha256; }
+            else { compilation = request.Action == "rollback" ? await repository.AppliedCompilation(plan.Id,plan.Version) ?? Compiler.Compile(plan) : Compiler.Compile(plan); script = request.Action == "apply" ? compilation.ApplyScript : compilation.RollbackScript; hash = compilation.Sha256; }
             if (!CryptographicOperations.FixedTimeEquals(Encoding.ASCII.GetBytes(hash), Encoding.ASCII.GetBytes(request.Hash ?? "")))
                 throw new ConflictException(L.T("deploy.hash"));
+            if (request.Action == "apply") {
+                var activeWaves=(await repository.ListDeployments(plan.Id)).Where(r=>r.WaveId is not null).GroupBy(r=>(r.Version,r.WaveId)).Select(g=>g.Last());
+                if(activeWaves.Any(r=>r.Action!="wave-rollback" || !r.Succeeded)) throw new ConflictException(L.T("waves.cleanupBeforeApply"));
+                if(Compiler.BroadScope(plan) && !request.AcknowledgeScope) throw new ValidationException(L.T("deploy.broadScope"));
+            }
             if (request.Action is "apply" or "rollback") {
-                var drift = await ReadDrift(plan, request.Action == "apply");
+                var drift = await ReadDrift(plan, request.Action == "apply", compilation, allowMissing: request.Action == "rollback");
+                if (request.Action == "rollback" && drift.External.Any(e=>e.Marker==compilation!.Marker)) throw new ConflictException(L.T("drift.renamed"));
                 if (!drift.Clean) {
                     if (!request.AcknowledgeDrift) throw new ConflictException(L.T("drift.blocked", Describe(drift)));
                     await repository.AppendDeployment(new(DateTimeOffset.UtcNow, identity, plan.Id, plan.Version, hash, "drift-acknowledged", true, JsonSerializer.Serialize(drift, Json.Settings)) { Approval = request.Approval?.Trim() });
                 }
             }
-            var (ok, output) = await runner.Run(script, TimeSpan.FromMinutes(10));
+            if (request.Action == "apply") await repository.FreezeCompilation(compilation!);
+            await repository.AppendDeployment(new(DateTimeOffset.UtcNow,identity,plan.Id,plan.Version,hash,request.Action,false,L.T("deploy.started")){Approval=request.Approval?.Trim(),InProgress=true});
+            var ok=false;var output="";
+            try { (ok,output)=await runner.Run(script,MutationTimeout(plan)); }
+            catch(Exception ex) { output=ex.Message;logger.LogWarning(ex,"Deployment result is inconclusive"); }
             var record = new DeploymentRecord(DateTimeOffset.UtcNow, identity, plan.Id, plan.Version, hash, request.Action, ok, output) { Approval = request.Approval?.Trim(), PendingDcs = ok ? PendingDcs(output) : [] };
             await repository.AppendDeployment(record);
             // Hosts keep a removed GPO until their next refresh; refresh them now (failures are recorded, the rollback stands).
@@ -86,17 +101,17 @@ public sealed class Deployment(IConfiguration config, PlanRepository repository,
     }
     public async Task<DriftReport> Drift(string planId, int version) {
         if (!Enabled) throw new UnauthorizedAccessException(L.T("deploy.disabled"));
-        var plan = await repository.Get(planId) ?? throw new ValidationException(L.T("deploy.planNotFound"));
-        if (plan.Version != version) throw new ConflictException(L.T("deploy.stale"));
+        var plan = await repository.Get(planId, version) ?? throw new ValidationException(L.T("deploy.planNotFound"));
         return await ReadDrift(plan, false);
     }
     // Before apply the Studio GPOs are expected to be absent: only external IPsec GPOs count. Before rollback/verify, every GPO must match.
-    async Task<DriftReport> ReadDrift(SavedPlan plan, bool beforeApply) {
-        var c = Compiler.Compile(plan);
+    async Task<DriftReport> ReadDrift(SavedPlan plan, bool beforeApply, Compilation? compilation = null, bool allowMissing = false) {
+        var c = compilation ?? await repository.AppliedCompilation(plan.Id,plan.Version) ?? Compiler.Compile(plan);
         var spec = new { domain = plan.Inventory.Domain, target = plan.Input.Settings.LinkTarget == "domain" ? plan.Inventory.DomainDn : plan.Input.Settings.LinkTarget, gpos = c.Gpos.Select(g => g.Name) };
         var (ok, output) = await runner.Run(DriftScript.Replace("__PINPDC__", Compiler.PinPdc).Replace("__DRIFT__", JsonSerializer.Serialize(spec)), TimeSpan.FromMinutes(5));
         if (!ok) throw new InvalidOperationException(L.T("deploy.remoteFailed", output));
         var reading = IpsecStudio.Drift.Parse(output);
+        if (reading.Gpos.Length != c.Gpos.Length || !reading.Gpos.Select(g=>g.Name).ToHashSet(StringComparer.OrdinalIgnoreCase).SetEquals(c.Gpos.Select(g=>g.Name))) throw new InvalidOperationException(L.T("drift.incomplete"));
         var planHosts = PlanRules.Assess(plan.Input, plan.Inventory).Hosts.Where(h => h.Profile != "dc").Select(h => h.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
         reading = reading with { External = reading.External.Select(e => e with { InPlan = e.Computers.Where(planHosts.Contains).ToArray() }).ToArray() };
         var report = IpsecStudio.Drift.Compare(c, reading);
@@ -104,7 +119,7 @@ public sealed class Deployment(IConfiguration config, PlanRepository repository,
         var relevant = beforeApply ? report.Gpos.Where(g => g.Exists).Select(g => g with { Differences = g.Differences.Length == 0 ? [L.T("drift.present")] : g.Differences }).ToArray()
                                    : report.Gpos.Where(g => g.Exists).ToArray();
         var absent = report.Gpos.Where(g => !g.Exists).Select(g => g with { Differences = beforeApply ? [] : g.Differences }).ToArray();
-        var dirty = relevant.Any(g => g.Differences.Length > 0) || reading.External.Any(IpsecStudio.Drift.Blocks);
+        var dirty = relevant.Any(g => g.Differences.Length > 0) || (!beforeApply && !allowMissing && absent.Length > 0) || reading.External.Any(IpsecStudio.Drift.Blocks);
         return report with { Gpos = [.. relevant, .. absent], Clean = !dirty };
     }
     static string Describe(DriftReport r) => string.Join(" | ", r.Gpos.Where(g => g.Differences.Length > 0).Select(g => g.Name + ": " + string.Join("; ", g.Differences)).Concat(r.External.Select(e => L.T("drift.external", e.Name, e.RuleCount))));
@@ -116,47 +131,110 @@ public sealed class Deployment(IConfiguration config, PlanRepository repository,
         if (request.Action == "wave-apply" && string.IsNullOrWhiteSpace(request.Approval)) throw new ValidationException(L.T("deploy.approval"));
         await gate.WaitAsync();
         try {
-            var plan = await repository.Get(request.PlanId) ?? throw new ValidationException(L.T("deploy.planNotFound"));
+            var plan = await repository.Get(request.PlanId, request.Action == "wave-rollback" ? request.Version : null) ?? throw new ValidationException(L.T("deploy.planNotFound"));
             if (plan.Version != request.Version) throw new ConflictException(L.T("deploy.stale"));
             var index = Array.FindIndex(plan.Input.Waves, w => w.Id == request.WaveId);
             if (index < 0) throw new ValidationException(L.T("waves.notFound"));
             var log = await repository.ListDeployments(plan.Id);
-            if (request.Action == "wave-apply")
-                foreach (var earlier in plan.Input.Waves.Take(index)) {
-                    var last = log.Where(r => r.WaveId == earlier.Id).LastOrDefault();
-                    if (last is { Action: "wave-apply", ExpansionAllowed: false }) throw new ConflictException(L.T("waves.blocked", earlier.Name));
-                }
-            var wave = Compiler.CompileWave(plan, request.WaveId);
+            log = log.Where(r => r.Version == plan.Version).ToArray();
+            var deployed = log.LastOrDefault(r => r.Action is "apply" or "rollback");
             var apply = request.Action == "wave-apply";
-            var (ok, output) = await runner.Run(apply ? wave.ApplyScript : wave.RollbackScript, TimeSpan.FromMinutes(5));
-            HostResult[] verify = []; ProbeResult[] probe = []; var expansion = ok;
-            if (ok) {
-                var membership = PlanRules.AfterWaves(plan.Input, plan.Inventory, apply ? index + 1 : index);
-                await RunHosts(plan, wave.ComputerIds, "refresh", identity);
-                verify = await RunHosts(plan, wave.ComputerIds, "verify", identity);
-                probe = await RunProbe(plan, membership, wave.ComputerIds, identity);
-                expansion = verify.All(h => h.Reachable && IsHealthy(h.Output)) && probe.All(p => p.Match);
+            var hasPolicy = deployed is { Action: "apply", Succeeded: true };
+            if (apply && !hasPolicy) throw new ConflictException(L.T("waves.noDeployment"));
+            if(apply) {
+                var scope=Authorization.Scopes(plan.Input,plan.Inventory);
+                if(plan.Input.Waves[index].Members.SelectMany(m=>m.ComputerIds).Any(id=>scope[id]!=true)) throw new ConflictException(L.T("scope.unknown",plan.Input.Waves[index].Members.Sum(m=>m.ComputerIds.Length)));
             }
-            await repository.AppendDeployment(new(DateTimeOffset.UtcNow, identity, plan.Id, plan.Version, wave.Sha256, request.Action, ok, output) { Approval = request.Approval?.Trim(), WaveId = wave.WaveId, ExpansionAllowed = apply ? expansion : null });
-            return new(wave.WaveId, wave.Name, ok, apply && expansion, output, verify, probe) { PendingDcs = ok ? PendingDcs(output) : [] };
+            if (apply) foreach (var earlier in plan.Input.Waves.Take(index)) {
+                var last = log.LastOrDefault(r => r.WaveId == earlier.Id);
+                if (last is not { Action: "wave-apply", Succeeded: true, ExpansionAllowed: true }) throw new ConflictException(L.T("waves.blocked", earlier.Name));
+            }
+            if (!apply) foreach (var later in plan.Input.Waves.Skip(index + 1)) {
+                var last = log.LastOrDefault(r => r.WaveId == later.Id);
+                if (last is not null && last.Action != "wave-rollback") throw new ConflictException(L.T("waves.reverseOrder", later.Name));
+                if (last is { Succeeded: false }) throw new ConflictException(L.T("waves.reverseOrder", later.Name));
+            }
+            if (apply) {
+                if (deployed!.PendingDcs.Length > 0) {
+                    var (read, replication)=await runner.Run(Compiler.ReplicationCheck(plan),MutationTimeout(plan));
+                    var confirmed=read && ReplicationConfirmed(replication);
+                    await repository.AppendDeployment(new(DateTimeOffset.UtcNow,identity,plan.Id,plan.Version,"","replication-check",confirmed,replication){PendingDcs=PendingDcs(replication)});
+                    if(!confirmed) throw new ConflictException(L.T("waves.noDeployment"));
+                }
+                var drift = await ReadDrift(plan,false);
+                if (!drift.Clean) throw new ConflictException(L.T("drift.blocked",Describe(drift)));
+            }
+            var wave = Compiler.CompileWave(plan, request.WaveId, repository.WaveJournalPath(plan.Id, plan.Version, request.WaveId));
+            await repository.AppendDeployment(new(DateTimeOffset.UtcNow, identity, plan.Id, plan.Version, wave.Sha256, request.Action + "-started", false, "") { Approval=request.Approval?.Trim(), WaveId=wave.WaveId, ExpansionAllowed=false, InProgress=true });
+            HostResult[] verify = []; ProbeResult[] probe = []; var expansion = false; var ok = false; var output = ""; string[] pending = []; var blockers=new List<string>();
+            try {
+                (ok, output) = await runner.Run(apply ? wave.ApplyScript : wave.RollbackScript, MutationTimeout(plan));
+                pending = PendingDcs(output);
+                var replicated=ok && ReplicationConfirmed(output);
+                if(ok && !replicated) { blockers.Add(L.T("waves.replicationIncomplete")); if(!apply) ok=false; }
+                if (ok && replicated) {
+                    var membership = PlanRules.AfterWaves(plan.Input, plan.Inventory, apply ? index + 1 : index);
+                    var refresh = await RunHosts(plan, wave.ComputerIds, "refresh", identity, membership);
+                    if (hasPolicy) {
+                        verify = await RunHosts(plan, wave.ComputerIds, "verify", identity, membership);
+                        // All managed initiators are needed: incoming negative witnesses matter too.
+                        var settleSeconds=Math.Clamp(config.GetValue("Deployment:SettleSeconds",120),0,600);
+                        if(settleSeconds>0) await Task.Delay(TimeSpan.FromSeconds(settleSeconds));
+                        probe = await RunProbe(plan, membership, null, identity);
+                    }
+                    var expected = TargetHosts(plan, wave.ComputerIds, membership).Select(h => h.Name + "." + plan.Inventory.Domain).ToHashSet(StringComparer.OrdinalIgnoreCase);
+                    var refreshed = refresh.Length == expected.Count && refresh.Select(h=>h.Host).ToHashSet(StringComparer.OrdinalIgnoreCase).SetEquals(expected) && refresh.All(h=>h.Reachable && RefreshSucceeded(h.Output));
+                    var verified = verify.Length == expected.Count && verify.Select(h=>h.Host).ToHashSet(StringComparer.OrdinalIgnoreCase).SetEquals(expected) && verify.All(h=>h.Reachable && IsHealthy(h.Output));
+                    var expectedPairs = ProbePairs(plan, membership);
+                    var probed = expectedPairs.Count > 0 && probe.Length == expectedPairs.Count && probe.Select(p=>p.Initiator + "\0" + p.Responder).ToHashSet(StringComparer.OrdinalIgnoreCase).SetEquals(expectedPairs) && probe.All(p=>p.Match && p.Conclusive);
+                    if(!refreshed) blockers.Add(L.T("waves.refreshIncomplete"));
+                    if(hasPolicy && !verified) blockers.Add(L.T("waves.verifyIncomplete"));
+                    if(hasPolicy && !probed) blockers.Add(L.T("waves.probeIncomplete"));
+                    expansion = replicated && refreshed && verified && probed;
+                    if (!apply) ok = refreshed && replicated && (!hasPolicy || verified && probed);
+                }
+                if(!ok && blockers.Count==0) blockers.Add(L.T("waves.mutationFailed"));
+            } catch (Exception ex) when (ex is not OperationCanceledException) { ok=false; blockers.Add(ex.Message); output += "\n" + ex.Message; }
+            finally {
+                await repository.AppendDeployment(new(DateTimeOffset.UtcNow, identity, plan.Id, plan.Version, wave.Sha256, request.Action, ok, output) { Approval=request.Approval?.Trim(), WaveId=wave.WaveId, ExpansionAllowed=apply ? expansion : null, PendingDcs=pending, Blockers=blockers.ToArray() });
+            }
+            return new(wave.WaveId, wave.Name, ok, apply && expansion, output, verify, probe) { PendingDcs=pending, Blockers=blockers.ToArray() };
         } finally { gate.Release(); }
+    }
+    public static bool ReplicationConfirmed(string output) {
+        try {
+            using var d=JsonDocument.Parse(output);
+            return d.RootElement.TryGetProperty("replication",out var map) && map.ValueKind==JsonValueKind.Object && map.EnumerateObject().Any() && map.EnumerateObject().All(p=>p.Value.ValueKind==JsonValueKind.String && p.Value.GetString()=="ok");
+        } catch(JsonException) { return false; }
+    }
+    public static TimeSpan MutationTimeout(SavedPlan plan) => TimeSpan.FromSeconds(Math.Max(600, plan.Input.Settings.ReplicationWaitSeconds + 300));
+    static bool RefreshSucceeded(string output) { try { using var d=JsonDocument.Parse(output); return d.RootElement.TryGetProperty("gpupdateExit",out var e) && e.GetInt32() == 0; } catch { return false; } }
+    static HashSet<string> ProbePairs(SavedPlan plan, InventorySnapshot membership) {
+        var a=PlanRules.Assess(plan.Input,membership);
+        var responders=a.Hosts.Where(h=>h.Profile is not ("dc" or "none") && h.Ip is not null).Select(h=>(Name:h.Name,Ip:h.Ip)).Concat(plan.Input.ExternalHosts.Select(x=>(Name:x.Name,Ip:(string?)x.Address))).ToArray();
+        return TargetHosts(plan,null,membership).SelectMany(i=>responders.Where(r=>r.Ip != i.Ip).Select(r=>i.Name + "\0" + r.Name)).ToHashSet(StringComparer.OrdinalIgnoreCase);
     }
     static bool IsHealthy(string output) { try { using var doc = JsonDocument.Parse(output); return doc.RootElement.TryGetProperty("healthy", out var h) && h.GetBoolean(); } catch { return false; } }
     // Membership as the AD should look now: inventory plus every wave whose last record is a successful apply.
     async Task<InventorySnapshot> AppliedMembership(SavedPlan plan) {
         var log = await repository.ListDeployments(plan.Id);
         var count = 0;
-        foreach (var w in plan.Input.Waves) { var last = log.Where(r => r.WaveId == w.Id).LastOrDefault(); if (last is { Action: "wave-apply", Succeeded: true }) count++; else break; }
+        foreach (var w in plan.Input.Waves) { var last = log.Where(r => r.Version == plan.Version && r.WaveId == w.Id).LastOrDefault(); if (last is { Action: "wave-apply", Succeeded: true }) count++; else break; }
         return PlanRules.AfterWaves(plan.Input, plan.Inventory, count);
     }
     public async Task<HostResult[]> HostOperation(HostRequest request, string identity) {
         if (!Enabled) throw new UnauthorizedAccessException(L.T("deploy.remoteDisabled"));
         if (request.Action is not ("refresh" or "verify")) throw new ValidationException(L.T("deploy.action"));
-        var plan = await repository.Get(request.PlanId) ?? throw new ValidationException(L.T("deploy.planNotFound"));
+        var plan = await repository.Get(request.PlanId,request.Version) ?? throw new ValidationException(L.T("deploy.planNotFound"));
         if (plan.Version != request.Version) throw new ConflictException(L.T("deploy.stale"));
-        return await RunHosts(plan, request.ComputerIds, request.Action, identity);
+        await gate.WaitAsync();
+        try {
+            var last=(await repository.ListDeployments(plan.Id)).Where(r=>r.Version==plan.Version).LastOrDefault(r=>r.Action is "apply" or "rollback");
+            return await RunHosts(plan, request.ComputerIds, request.Action, identity, await AppliedMembership(plan), expectAbsent:last is {Action:"rollback",Succeeded:true});
+        }
+        finally { gate.Release(); }
     }
-    async Task<HostResult[]> RunHosts(SavedPlan plan, string[]? computerIds, string action, string identity, InventorySnapshot? membership = null, bool studioLast = false) {
+    async Task<HostResult[]> RunHosts(SavedPlan plan, string[]? computerIds, string action, string identity, InventorySnapshot? membership = null, bool studioLast = false, bool expectAbsent = false) {
         var hosts = OrderStudio(TargetHosts(plan, computerIds, membership), h => h.Name, Environment.MachineName, studioLast).ToArray();
         var script = (action == "refresh" ? RefreshScript : VerifyScript).Replace("__HOSTS__", JsonSerializer.Serialize(hosts.Select(h => h.Name + "." + plan.Inventory.Domain)))
             .Replace("__GROUPSIDS__", JsonSerializer.Serialize(ProfileGroupSids(plan))).Replace("__OUTSIDE__", action == "verify" ? OutsideCheck : "")
@@ -165,7 +243,7 @@ public sealed class Deployment(IConfiguration config, PlanRepository repository,
         await repository.AppendDeployment(new(DateTimeOffset.UtcNow, identity, plan.Id, plan.Version, "", action, ok, output));
         if (!ok) throw new InvalidOperationException(L.T("deploy.remoteFailed", output));
         var results = JsonSerializer.Deserialize<HostResult[]>(output, Json.Settings) ?? [];
-        return action == "verify" ? results.Select(WithIdentity).ToArray() : results;
+        return action == "verify" ? results.Select(h => WithIdentity(EffectivePolicy.Enrich(plan, membership ?? plan.Inventory, h, expectAbsent))).ToArray() : results;
     }
     static string[] ProfileGroupSids(SavedPlan plan) {
         var map = plan.Inventory.Objects.ToDictionary(o => o.Id);
@@ -187,15 +265,17 @@ public sealed class Deployment(IConfiguration config, PlanRepository repository,
         tgtStart is null || lastGroupChange is null ? "unknown" : tgtStart >= lastGroupChange ? "synced" : "pending";
     public async Task<ProbeResult[]> Probe(HostRequest request, string identity) {
         if (!Enabled) throw new UnauthorizedAccessException(L.T("deploy.probeDisabled"));
-        var plan = await repository.Get(request.PlanId) ?? throw new ValidationException(L.T("deploy.planNotFound"));
+        var plan = await repository.Get(request.PlanId,request.Version) ?? throw new ValidationException(L.T("deploy.planNotFound"));
         if (plan.Version != request.Version) throw new ConflictException(L.T("deploy.stale"));
-        return await RunProbe(plan, await AppliedMembership(plan), request.ComputerIds, identity, request.Capture);
+        await gate.WaitAsync();
+        try { return await RunProbe(plan, await AppliedMembership(plan), request.ComputerIds, identity, request.Capture); }
+        finally { gate.Release(); }
     }
     async Task<ProbeResult[]> RunProbe(SavedPlan plan, InventorySnapshot membership, string[]? computerIds, string identity, bool capture = false) {
         var a = PlanRules.Assess(plan.Input, membership);
         // The Studio host probes first: later probes keep their SAs with it (its WinRM session), which would leave asymmetric state.
-        var initiators = OrderStudio(TargetHosts(plan, computerIds), h => h.Name, Environment.MachineName, last: false).ToArray();
-        var responders = a.Hosts.Where(h => h.Profile != "dc" && h.Ip is not null).Select(h => new { h.ComputerId, h.Name, Ip = h.Ip!, Port = ProbePort })
+        var initiators = OrderStudio(TargetHosts(plan, computerIds, membership), h => h.Name, Environment.MachineName, last: false).ToArray();
+        var responders = a.Hosts.Where(h => h.Profile is not ("dc" or "none") && h.Ip is not null).Select(h => new { h.ComputerId, h.Name, Ip = h.Ip!, Port = ProbePort })
             .Concat(plan.Input.ExternalHosts.Select(x => new { ComputerId = x.Id, x.Name, Ip = x.Address, Port = ProbePort })).ToArray();
         var studioIps = StudioIps();
         var spec = new { initiators = initiators.Select(h => new { h.Name, Fqdn = h.Name + "." + plan.Inventory.Domain, h.ComputerId }), responders, studioIps };
@@ -227,7 +307,10 @@ public sealed class Deployment(IConfiguration config, PlanRepository repository,
         return raw.Select(p => {
             var expected = p.Error is not null ? "indeterminate" : Simulator.Evaluate(plan.Input, membership, a, p.InitiatorId, p.ResponderId).Outcome;
             var observed = Classify(p.Tcp, p.Cipher, p.Error);
-            var result = new ProbeResult(p.Initiator, p.Responder, expected, observed, expected == observed, p.Error ?? $"tcp={p.Tcp} cipher={p.Cipher ?? "-"} integrity={p.Integrity ?? "-"} auth={p.Auth ?? "-"}");
+            var conclusive = expected!="indeterminate" && p.Error is null && (expected != "blocked" || raw.Any(w => w.ResponderId == p.ResponderId && w.Tcp && w.Error is null));
+            if(expected=="blocked" && !conclusive) observed="unreachable";
+            var detail=p.Error ?? $"tcp={p.Tcp} cipher={p.Cipher ?? "-"} integrity={p.Integrity ?? "-"} auth={p.Auth ?? "-"}" + (!p.Tcp ? " (" + L.T("probe.noConnection") + ")" : "") + (expected=="blocked" && !conclusive ? " " + L.T("probe.needWitness") : "");
+            var result = new ProbeResult(p.Initiator, p.Responder, expected, observed, conclusive && expected == observed, detail) { Conclusive = conclusive };
             var host = captured.FirstOrDefault(h => h.Host.Equals(p.Responder, StringComparison.OrdinalIgnoreCase));
             if (host is null || !ips.TryGetValue(p.InitiatorId, out var from) || !ips.TryGetValue(p.ResponderId, out var to)) return result;
             var (esp, clear, attempts) = Wire.Count(host.Buckets ?? [], from, to, ProbePort);
@@ -240,7 +323,11 @@ public sealed class Deployment(IConfiguration config, PlanRepository repository,
     static HostProfile[] TargetHosts(SavedPlan plan, string[]? ids, InventorySnapshot? membership = null) {
         var a = PlanRules.Assess(plan.Input, membership ?? plan.Inventory);
         var hosts = a.Hosts.Where(h => h.Profile != "dc" && h.Profile != "none");
-        if (ids is { Length: > 0 }) hosts = hosts.Where(h => ids.Contains(h.ComputerId));
+        if (ids is not null) {
+            var selected=ids.ToHashSet(StringComparer.OrdinalIgnoreCase);
+            if(selected.Count==0 || !selected.IsSubsetOf(hosts.Select(h=>h.ComputerId))) throw new ValidationException(L.T("deploy.scope"));
+            hosts = hosts.Where(h=>selected.Contains(h.ComputerId));
+        }
         var result = hosts.ToArray();
         if (result.Length == 0) throw new ValidationException(L.T("deploy.noHosts"));
         foreach (var h in result) if (!System.Text.RegularExpressions.Regex.IsMatch(h.Name, @"\A[A-Za-z0-9-]{1,63}\z")) throw new ValidationException(L.T("deploy.badHostName", h.Name));
@@ -263,12 +350,12 @@ $links=@{}
 foreach($l in (Get-GPInheritance -Target $spec.target).GpoLinks){ $links[$l.DisplayName]=[bool]$l.Enabled }
 $gpos=@()
 foreach($name in @($spec.gpos)){
-  $g=Get-GPO -Name $name -ErrorAction SilentlyContinue
+  $g=Get-StudioGpoOrNull $name
   if(-not $g){ $gpos+=@{name=$name;exists=$false;marker=$null;version=0;linked=$false;rules=@();authorizationSddl='';exemptions='';applyGroups=@();denySids=@()}; continue }
   $store=$spec.domain+'\'+$name
   $gs=Open-NetGPO -PolicyStore $store -DomainController $pdc
   $errors=@(); $rules=@(); $setting=$null
-  try{ $rules=@(Get-NetIPsecRule -GPOSession $gs -ErrorAction Stop | ForEach-Object { $af=$_|Get-NetFirewallAddressFilter -ErrorAction Stop; @{name=$_.IPsecRuleName;inbound=$_.InboundSecurity.ToString();outbound=$_.OutboundSecurity.ToString();requireAuthorization=[bool]$_.RequireAuthorization;remoteAddress=(@($af.RemoteAddress) -join ',')} }) }catch{ $errors+="rules: $($_.Exception.Message)" }
+  try{ $rules=@(Get-NetIPsecRule -GPOSession $gs -ErrorAction Stop | ForEach-Object { $af=$_|Get-NetFirewallAddressFilter -ErrorAction Stop; $pf=$_|Get-NetFirewallPortFilter -ErrorAction Stop; @{localAddress=(@($af.LocalAddress)-join ',');protocol=[string]$pf.Protocol;localPort=(@($pf.LocalPort)-join ',');remotePort=(@($pf.RemotePort)-join ',');mode=[string]$_.Mode;profile=[string]$_.Profile;phase1AuthSet=[string]$_.Phase1AuthSet;quickModeCryptoSet=[string]$_.QuickModeCryptoSet;name=$_.IPsecRuleName;inbound=$_.InboundSecurity.ToString();outbound=$_.OutboundSecurity.ToString();requireAuthorization=[bool]$_.RequireAuthorization;enabled=($_.Enabled -eq 'True');remoteAddress=(@($af.RemoteAddress) -join ',')} }) }catch{ $errors+="rules: $($_.Exception.Message)" }
   try{ $setting=Get-NetFirewallSetting -GPOSession $gs -ErrorAction Stop }catch{ $errors+="setting: $($_.Exception.Message)" }
   $crypto=$null
   try{
@@ -277,17 +364,19 @@ foreach($name in @($spec.gpos)){
     $p1Sets=@(Get-NetIPsecPhase1AuthSet -GPOSession $gs -ErrorAction Stop)
     $crypto=@{mainMode=@($mmSets | ForEach-Object { $_.Proposal } | ForEach-Object { "$($_.Encryption)-$($_.Hash)-$($_.KeyExchange)" });mainModeMinutes=$(if($mmSets.Count){[int]$mmSets[0].MaxMinutes}else{0});quickMode=@($qmSets | ForEach-Object { $_.Proposal } | ForEach-Object { "$($_.Encapsulation)-$($_.Encryption)-$($_.ESPHash)-$($_.MaxMinutes)" });phase1=@($p1Sets | ForEach-Object { $_.Proposal } | ForEach-Object { "$($_.AuthenticationMethod)" })}
   }catch{ $errors+="crypto: $($_.Exception.Message)" }
-  $perm=@(Get-GPPermission -Guid $g.Id -All | Where-Object { $_.Permission -eq 'GpoApply' } | ForEach-Object { $_.Trustee.Name })
+  $applying=@(Get-GPPermission -Guid $g.Id -All | Where-Object { $_.Permission -eq 'GpoApply' })
+  $perm=@($applying | ForEach-Object { $_.Trustee.Name })
+  $applySids=@($applying | ForEach-Object { [string]$_.Trustee.Sid })
   $acl=Get-Acl -Path ('IpsecPdc:\'+$g.Path)
   $deny=@($acl.Access | Where-Object { $_.AccessControlType -eq 'Deny' -and $_.ObjectType -eq $apply } | ForEach-Object { $_.IdentityReference.Translate([Security.Principal.SecurityIdentifier]).Value })
-  $gpos+=@{name=$name;exists=$true;marker=$g.Description;version=[int]$g.Computer.DSVersion;linked=[bool]$links[$name];rules=$rules;authorizationSddl=[string]$setting.RemoteMachineTransportAuthorizationList;exemptions=[string]$setting.Exemptions;applyGroups=$perm;denySids=$deny;errors=$errors;crypto=$crypto}
+  $gpos+=@{name=$name;exists=$true;enabled=($g.GpoStatus -notin @('AllSettingsDisabled','ComputerSettingsDisabled'));marker=$g.Description;version=[int]$g.Computer.DSVersion;linked=[bool]$links[$name];rules=$rules;authorizationSddl=[string]$setting.RemoteMachineTransportAuthorizationList;exemptions=[string]$setting.Exemptions;applyGroups=$perm;applySids=$applySids;denySids=$deny;errors=$errors;crypto=$crypto}
 }
 # Other GPOs with connection security rules. Rules written by the NetSecurity cmdlets or the firewall snap-in register the
 # Windows Firewall extension in gPCMachineExtensionNames (lab, CV4.DS7), so one LDAP query selects the candidates; only those are opened.
 # If the Studio's own GPOs exist without that extension the attribute is not trusted here and every GPO is opened.
 $fwExt='{B05566AC-FE9C-4368-BE01-7A4CBB6CBA11}'
 $base=$domain.DistinguishedName
-$all=@(Get-ADObject -LDAPFilter '(objectClass=groupPolicyContainer)' -SearchBase "CN=Policies,CN=System,$base" -Properties displayName,gPCMachineExtensionNames)
+$all=@(Get-ADObject -LDAPFilter '(objectClass=groupPolicyContainer)' -SearchBase "CN=Policies,CN=System,$base" -Properties displayName,gPCMachineExtensionNames,description)
 $ours=@($all | Where-Object { $_.displayName -in @($spec.gpos) })
 $filtered=($ours.Count -eq 0) -or (@($ours | Where-Object { "$($_.gPCMachineExtensionNames)" -like "*$fwExt*" }).Count -gt 0)
 $candidates=@($all | Where-Object { $_.displayName -notin @($spec.gpos) -and (-not $filtered -or "$($_.gPCMachineExtensionNames)" -like "*$fwExt*") })
@@ -299,7 +388,7 @@ foreach($c in $candidates){
     $pattern='\[LDAP://cn='+[regex]::Escape($guid)+',[^;\]]*;(\d)\]'
     $links=@(Get-ADObject -LDAPFilter "(gPLink=*$guid*)" -SearchBase $base -Properties gPLink | Where-Object { $m=[regex]::Match([string]$_.gPLink,$pattern,'IgnoreCase'); $m.Success -and (([int]$m.Groups[1].Value) -band 1) -eq 0 } | ForEach-Object { $_.DistinguishedName })
     $computers=@($links | ForEach-Object { Get-ADComputer -SearchBase $_ -SearchScope Subtree -Filter * | ForEach-Object { $_.Name } } | Sort-Object -Unique)
-    $external+=@{name=$c.displayName;ruleCount=$n;links=$links;computers=@($computers | Select-Object -First 500)}
+    $external+=@{name=$c.displayName;marker=[string]$c.description;ruleCount=$n;links=$links;computers=@($computers | Select-Object -First 500)}
   }
 }
 @{gpos=$gpos;external=$external;scan=@{total=$all.Count;opened=$candidates.Count;filtered=$filtered}} | ConvertTo-Json -Compress -Depth 6
@@ -330,6 +419,7 @@ foreach($h in @($hosts)){
 ConvertTo-Json @($results) -Compress -Depth 8
 """;
     const string NL = "\n";
+    public static string VerifyScriptText => VerifyScript;
     public static string RefreshScriptText => RefreshScript;
     public static string DriftScriptText => DriftScript;
     // Reads the "replication" map the generated scripts print ({dc: ok|timeout|unreachable}) and returns the DCs not "ok".
@@ -416,10 +506,14 @@ ConvertTo-Json @($results) -Compress -Depth 6
       if($outsideTarget){ $ip,$port=$outsideTarget -split ':'; $c=New-Object Net.Sockets.TcpClient; try{ $a=$c.BeginConnect($ip,[int]$port,$null,$null); $outside=($a.AsyncWaitHandle.WaitOne(5000) -and $c.Connected) }catch{ $outside=$false } finally{ $c.Close() } }
       $tgt=$null
       try{ $text=(klist.exe -li 0x3e7 tgt 2>&1 | Out-String);  if($text -match 'Start\s*Time\s*:\s*([^\r\n]+?)\s*\(local\)'){ $tgt=[datetime]::Parse($matches[1],[Globalization.CultureInfo]::CurrentCulture).ToUniversalTime().ToString('o') } }catch{}
-      $rules=@(Get-NetIPsecRule -PolicyStore ActiveStore -TracePolicyStore | Where-Object DisplayName -like 'IpsecStudio*' | ForEach-Object {@{name=$_.IPsecRuleName;display=$_.DisplayName;inbound=$_.InboundSecurity.ToString();outbound=$_.OutboundSecurity.ToString();requireAuthorization=[bool]$_.RequireAuthorization;source=$_.PolicyStoreSource;enabled=$_.Enabled.ToString();status=$_.PrimaryStatus.ToString();statusText=[string]$_.Status}})
+      $rules=@(Get-NetIPsecRule -PolicyStore ActiveStore -TracePolicyStore | Where-Object DisplayName -like 'IpsecStudio*' | ForEach-Object { $af=$_ | Get-NetFirewallAddressFilter; $pf=$_ | Get-NetFirewallPortFilter; @{localAddress=(@($af.LocalAddress)-join ',');protocol=[string]$pf.Protocol;localPort=(@($pf.LocalPort)-join ',');remotePort=(@($pf.RemotePort)-join ',');mode=[string]$_.Mode;profile=[string]$_.Profile;phase1AuthSet=[string]$_.Phase1AuthSet;quickModeCryptoSet=[string]$_.QuickModeCryptoSet;remoteAddress=(@($af.RemoteAddress) -join ',');name=$_.IPsecRuleName;display=$_.DisplayName;inbound=$_.InboundSecurity.ToString();outbound=$_.OutboundSecurity.ToString();requireAuthorization=[bool]$_.RequireAuthorization;source=$_.PolicyStoreSource;enabled=$_.Enabled.ToString();status=$_.PrimaryStatus.ToString();statusText=[string]$_.Status}})
       $setting=Get-NetFirewallSetting -PolicyStore ActiveStore
+      $mm=@(Get-NetIPsecMainModeCryptoSet -PolicyStore ActiveStore | Where-Object Name -eq '{E5A5D32A-4BCE-4e4d-B07F-4AB1BA7E5FE1}')
+      $qm=@(Get-NetIPsecQuickModeCryptoSet -PolicyStore ActiveStore | Where-Object Name -eq 'IpsecStudio-QM')
+      $p1=@(Get-NetIPsecPhase1AuthSet -PolicyStore ActiveStore | Where-Object Name -eq 'IpsecStudio-P1')
+      $crypto=@{mainMode=@($mm | ForEach-Object {$_.Proposal} | ForEach-Object {"$($_.Encryption)-$($_.Hash)-$($_.KeyExchange)"});mainModeMinutes=$(if($mm.Count){[int]$mm[0].MaxMinutes}else{0});quickMode=@($qm | ForEach-Object {$_.Proposal} | ForEach-Object {"$($_.Encapsulation)-$($_.Encryption)-$($_.ESPHash)-$($_.MaxMinutes)"});phase1=@($p1 | ForEach-Object {$_.Proposal} | ForEach-Object {"$($_.AuthenticationMethod)"})}
       $all=@(Get-NetIPsecRule -PolicyStore ActiveStore | Where-Object Enabled -eq True).Count
-      @{computer=$env:COMPUTERNAME;studioRules=$rules;enabledIpsecRules=$all;authorizationList=[string]$setting.RemoteMachineTransportAuthorizationList;exemptions=[string]$setting.Exemptions;gpos=@($rules | ForEach-Object {$_.source} | Sort-Object -Unique);healthy=(@($rules | Where-Object {$_.status -ne 'OK'}).Count -eq 0 -and $rules.Count -gt 0 -and $outside -ne $false);outside=$outside;tgtStartUtc=$tgt;lastGroupChangeUtc=$lastChangeUtc}
+      @{computer=$env:COMPUTERNAME;studioRules=$rules;crypto=$crypto;enabledIpsecRules=$all;authorizationList=[string]$setting.RemoteMachineTransportAuthorizationList;exemptions=[string]$setting.Exemptions;gpos=@($rules | ForEach-Object {$_.source} | Sort-Object -Unique);healthy=(@($rules | Where-Object {$_.status -ne 'OK'}).Count -eq 0 -and $rules.Count -gt 0 -and $outside -ne $false);outside=$outside;tgtStartUtc=$tgt;lastGroupChangeUtc=$lastChangeUtc}
     }
 """ + NL + RemoteEpilogue;
     // Starts an NDIS packet capture on each responder. Refuses a host where another trace is already running.

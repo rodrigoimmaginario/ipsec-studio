@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 const nodes = new Map();
-const node = (id) => { if (!nodes.has(id)) nodes.set(id, { innerHTML: '', textContent: '', hidden: false, disabled: false, value: '', addEventListener() {}, querySelector: () => null, close() {}, showModal() {}, classList: { add() {}, remove() {} }, focus() {}, setSelectionRange() {} }); return nodes.get(id); };
+const node = (id) => { if (!nodes.has(id)) nodes.set(id, { innerHTML: '', textContent: '', hidden: false, disabled: false, value: '', addEventListener() {}, querySelector: () => null, querySelectorAll: () => [], close() {}, showModal() {}, classList: { add() {}, remove() {} }, focus() {}, setSelectionRange() {} }); return nodes.get(id); };
 const sid = (n) => `S-1-5-21-1-2-3-${n}`;
 const comp = (name, ip, id, kind = 'server') => ({ id, name, kind, ip, sid: sid(id), dn: `CN=${name},DC=test`, parentDn: 'DC=test', memberIds: [], unresolvedMemberCount: 0 });
 const objects = [comp('app1', '10.74.1.20', 'app1'), comp('db1', '10.74.1.30', 'db1'), comp('dc1', '10.74.1.10', 'dc1', 'dc'),
@@ -17,11 +17,13 @@ const matrix = [{ initiator: 'app1', responder: 'db1', outcome: 'encrypted', rea
 const compilation = { sha256: 'a'.repeat(64), gpos: [{ name: 'IpsecStudio-Base', profile: 'base', applyGroup: 'Domain Computers', denyGroupSids: [sid(9)], inbound: 'Require', outbound: 'Request', encryption: false, computerIds: ['app1'] }, { name: 'IpsecStudio-Restricted-SQL', profile: 'restricted', applyGroup: 'IPSEC-SQL-Servers', denyGroupSids: [], inbound: 'Require', outbound: 'Require', encryption: true, computerIds: ['db1'] }], exemptAddresses: ['10.74.1.10'], applyScript: 'New-GPO', rollbackScript: 'Remove-GPO' };
 const saved = { id: '11111111-1111-1111-1111-111111111111', version: 1, name: 'Lab', input: null, inventory };
 const routes = (url, body) => url.endsWith('/status') ? { version: '0.3.0', identity: 'LAB\\op', host: 'admin1', domain: 'lab.ipsec.test', token: 't', inventory, deploymentEnabled: true, probePort: 5985 }
-  : url.includes('/simulate') ? { assessment, matrix, wave: 0, waveHosts: assessment.hosts } : url.endsWith('/compile') ? compilation : url.endsWith('/deployments') ? [{ utc: new Date().toISOString(), action: 'apply', version: 1, succeeded: true, output: '{}' }]
+  : url.includes('/simulate') ? { assessment, matrix, wave: 0, waveHosts: assessment.hosts } : url.includes('/compile') ? compilation : url.endsWith('/deployments') ? [{ utc: new Date().toISOString(), action: 'apply', version: 1, succeeded: true, output: '{}' }]
   : url === '/api/plans' && body ? { ...saved, input: body } : url === '/api/plans' ? [saved] : url.endsWith('/drift') ? { clean: false, gpos: [{ name: 'IpsecStudio-Base', exists: true, differences: ['IpsecStudio-Main: inbound esperado Require, encontrado Request'] }], external: [{ name: 'Corp-Legacy', ruleCount: 1, links: ['DC=test'] }], utc: new Date().toISOString() } : url.endsWith('/probe') ? [{ initiator: 'app1', responder: 'db1', expected: 'encrypted', observed: 'encrypted', match: true, detail: 'tcp=True cipher=AES256' }] : {};
 const storage = new Map();
-const context = vm.createContext({ console, localStorage: { getItem: (k) => storage.get(k) ?? null, setItem: (k, v) => storage.set(k, v) }, crypto: { randomUUID: () => '00000000-0000-0000-0000-000000000000' }, setTimeout, clearTimeout, Date, confirm: () => true, location: { hash: '#inventory' }, document: { querySelector: node, addEventListener() {}, documentElement: {} }, window: { addEventListener() {} },
-  fetch: async (url, init) => ({ ok: true, json: async () => routes(url, init?.body ? JSON.parse(init.body) : null) }) });
+const documentEvents = {};
+const requests = [];
+const context = vm.createContext({ console, localStorage: { getItem: (k) => storage.get(k) ?? null, setItem: (k, v) => storage.set(k, v) }, crypto: { randomUUID: () => '00000000-0000-0000-0000-000000000000' }, setTimeout, clearTimeout, structuredClone, Date, confirm: () => true, location: { hash: '#inventory' }, document: { querySelector: node, addEventListener(event, handler) { documentEvents[event] = handler; }, documentElement: {} }, window: { addEventListener() {} },
+  fetch: async (url, init) => { const body = init?.body ? JSON.parse(init.body) : null; requests.push({url,body}); return { ok: true, json: async () => routes(url,body) }; } });
 vm.runInContext(readFileSync(new URL('../../app/IpsecStudio/wwwroot/i18n.js', import.meta.url), 'utf8'), context);
 vm.runInContext(readFileSync(new URL('../../app/IpsecStudio/wwwroot/app.js', import.meta.url), 'utf8'), context);
 await new Promise((r) => setTimeout(r, 20));
@@ -59,4 +61,18 @@ assert.ok(main.innerHTML.includes('What will Windows do') && main.innerHTML.incl
 assert.equal(storage.get('ipsec-studio-lang'), 'en', 'language persisted');
 vm.runInContext("setLang('pt'); render()", context);
 assert.ok(main.innerHTML.includes('O que o Windows fará') && storage.get('ipsec-studio-lang') === 'pt', 'pt-BR restored');
-console.log('PASS 0.3 UI renders inventory, five profiles, outcome matrix, deployment panel and PT/EN switch (stubbed API; no browser)');
+// A draft must not mutate the saved nested settings, and confirmation checkboxes must not invalidate compilation.
+vm.runInContext("state.saved = {input:structuredClone(state.draft)}; state.draft = draftFromSaved(state.saved); setField('settings.requireOutbound',true)", context);
+assert.equal(vm.runInContext('state.saved.input.settings.requireOutbound',context),false,'draft settings do not mutate saved settings');
+const beforeCompile = vm.runInContext('state.compilation',context);
+documentEvents.change({target:{type:'checkbox',id:'ack',dataset:{}}});
+await new Promise(r=>setTimeout(r,20));
+assert.equal(vm.runInContext('state.compilation',context),beforeCompile,'approval checkbox must not reassess or clear compiled artifact');
+vm.runInContext("state.saved={id:'11111111-1111-1111-1111-111111111111',version:2,input:structuredClone(state.draft)};state.log=[{action:'apply',version:1,succeeded:true,utc:new Date().toISOString(),output:'{}'}];state.page='deploy';render()",context);
+assert.ok(main.innerHTML.includes('Abrir revisão 1'), 'old deployed revision can be opened for recovery');
+documentEvents.click({target:{closest:()=>({dataset:{action:'deploy',kind:'rollback'}})}});
+await new Promise(r=>setTimeout(r,30));
+assert.ok(requests.some(r=>r.url.endsWith('/compile?version=1')), 'rollback previews the deployed revision, not latest edit');
+assert.equal(requests.findLast(r=>r.url==='/api/deploy').body.version,1,'rollback requests old deployed revision');
+vm.runInContext('clearTimeout(toast.timer)',context);
+console.log('PASS UI renders inventory, five profiles, outcome matrix, deployment panel and PT/EN switch (stubbed API; no browser)');

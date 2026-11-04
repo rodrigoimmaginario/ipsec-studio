@@ -69,7 +69,7 @@ public class OutboundTests : IDisposable {
         var repo = new PlanRepository(folder);
         var saved = await repo.Save(null, f.Plan, f.Snapshot, PlanRules.Assess(f.Plan, f.Snapshot), "t");
         var c = Compiler.Compile(saved);
-        var runner = new FakeRunner { Reply = s => s.Contains("gpupdate") ? (false, "host down") : (true, "{}") };
+        var runner = new FakeRunner { Reply = s => s.Contains("gpupdate") ? (false, "host down") : ScriptReplies.Default(s) };
         var d = new Deployment(new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?> { ["Deployment:Enabled"] = "true" }).Build(), repo, runner, NullLogger<Deployment>.Instance);
         var r = await d.Execute(new(saved.Id, 1, c.Sha256, "rollback", ""), "op");
         Assert.True(r.Succeeded);

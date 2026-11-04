@@ -46,8 +46,10 @@ public class WaveTests {
         var plan = WithWaves();
         var saved = new SavedPlan(LabFixture.Id(), 1, plan.Name, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, "t", plan, snapshot, PlanRules.Assess(plan, snapshot));
         var w = Compiler.CompileWave(saved, plan.Waves[0].Id);
-        Assert.Contains($"Add-ADGroupMember -Identity '{f.SqlClients.Sid}' -Members '{f.App1.Sid}'", w.ApplyScript);
-        Assert.Contains($"Remove-ADGroupMember -Identity '{f.SqlClients.Sid}' -Members '{f.App1.Sid}'", w.RollbackScript);
+        Assert.Contains($"\"g\":\"{f.SqlClients.Sid}\",\"c\":\"{f.App1.Sid}\"", w.ApplyScript);
+        Assert.Contains("Add-ADGroupMember -Identity $p.g -Members $p.c", w.ApplyScript);
+        Assert.Contains("Remove-ADGroupMember -Identity $e.g -Members $e.c", w.RollbackScript);
+        Assert.Contains("$owned=@($journal | Where-Object { $_.state -eq 'added' })", w.RollbackScript);
         Assert.DoesNotContain("app1", w.ApplyScript.Split('\n').Single(l => l.Contains("Add-ADGroupMember")));
         Assert.Equal(64, w.Sha256.Length);
         Assert.Equal([f.App1.Id], w.ComputerIds);
@@ -59,7 +61,12 @@ public class WaveTests {
         var plan = f.Plan with { NewGroups = [new() { Id = LabFixture.Id(), Name = "IPSEC-Web-Servers", Description = "Servidores web" }], Settings = f.Plan.Settings with { GroupContainer = "OU=Groups,DC=lab,DC=ipsec,DC=test" } };
         var saved = new SavedPlan(LabFixture.Id(), 1, plan.Name, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, "t", plan, f.Snapshot, PlanRules.Assess(plan, f.Snapshot));
         var g = Compiler.CompileGroups(saved);
-        Assert.Contains("New-ADGroup -Name 'IPSEC-Web-Servers' -GroupScope Global -GroupCategory Security -Path 'OU=Groups,DC=lab,DC=ipsec,DC=test'", g.ApplyScript);
+        Assert.Contains("New-ADGroup -Name $g.name -GroupScope Global -GroupCategory Security -Path $spec.container", g.ApplyScript);
+        Assert.Contains("\"container\":\"OU=Groups,DC=lab,DC=ipsec,DC=test\"", g.ApplyScript);
+        var quoted = plan with { Settings=plan.Settings with { GroupContainer="OU=Equipe d'Operacao,DC=lab,DC=ipsec,DC=test" } };
+        var quotedScript=Compiler.CompileGroups(f.Saved(quoted)).ApplyScript;
+        Assert.Contains("\\u0027",quotedScript);
+        Assert.DoesNotContain("-Path 'OU=Equipe d'Operacao",quotedScript);
         Assert.Throws<ValidationException>(() => PlanRules.Assess(plan with { NewGroups = [plan.NewGroups[0] with { Name = "bad'name" }] }, f.Snapshot));
         Assert.Throws<ValidationException>(() => PlanRules.Assess(plan with { NewGroups = [plan.NewGroups[0] with { Name = f.SqlServers.Name }] }, f.Snapshot));
         Assert.Throws<ValidationException>(() => PlanRules.Assess(plan with { Settings = plan.Settings with { GroupContainer = "not a dn" } }, f.Snapshot));

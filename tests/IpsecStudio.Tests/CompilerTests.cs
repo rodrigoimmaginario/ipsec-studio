@@ -13,15 +13,15 @@ public class CompilerTests {
         Assert.Equal(["base", "restricted", "restricted", "boundary", "management", "quarantine"], c.Gpos.Select(g => g.Profile));
         var b = c.Gpos[0];
         Assert.Equal(DomainSid + "-515", b.ApplyGroupSid);
-        Assert.True(b.DenyGroupSids.ToHashSet().SetEquals([f.SqlServers.Sid!, f.FileServers.Sid!, f.Boundary.Sid!, f.AdminClients.Sid!, f.NoPolicy.Sid!, f.Exclusion.Sid!]));
+        Assert.True(b.DenyGroupSids.ToHashSet().SetEquals([f.SqlServers.Sid!, f.FileServers.Sid!, f.Boundary.Sid!, f.AdminClients.Sid!, f.NoPolicy.Sid!, f.Exclusion.Sid!, DomainSid + "-516", DomainSid + "-521"]));
         Assert.Equal($"O:LSD:(D;;CC;;;{f.Exclusion.Sid})(A;;CC;;;{DomainSid}-515)", b.AuthorizationSddl);
         Assert.Equal(("Require", "Request"), (b.Inbound, b.Outbound)); Assert.True(b.RequireAuthorization);
         var s = c.Gpos.Single(g => g.ApplyGroup == "IPSEC-SQL-Servers");
         Assert.True(s.Encryption); Assert.Equal(("Require", "Request"), (s.Inbound, s.Outbound)); // no outbound Require by default (lab 29/10)
         Assert.Equal($"O:LSD:(D;;CC;;;{f.Exclusion.Sid})(A;;CC;;;{f.SqlServers.Sid})(A;;CC;;;{f.SqlClients.Sid})(A;;CC;;;{f.AdminClients.Sid})", s.AuthorizationSddl);
-        Assert.Equal([f.NoPolicy.Sid!, f.Exclusion.Sid!], s.DenyGroupSids);
+        Assert.Equal([f.NoPolicy.Sid!, f.Exclusion.Sid!, DomainSid + "-516", DomainSid + "-521"], s.DenyGroupSids);
         var bd = c.Gpos.Single(g => g.Profile == "boundary"); Assert.Equal("Request", bd.Inbound); Assert.False(bd.RequireAuthorization); Assert.Null(bd.AuthorizationSddl);
-        Assert.Equal($"O:LSD:(A;;CC;;;{DomainSid}-515)", c.Gpos.Single(g => g.Profile == "management").AuthorizationSddl);
+        Assert.Equal($"O:LSD:(A;;CC;;;{DomainSid}-515)(A;;CC;;;{f.Exclusion.Sid})", c.Gpos.Single(g => g.Profile == "management").AuthorizationSddl);
         var q = c.Gpos.Single(g => g.Profile == "quarantine");
         Assert.Equal(f.Exclusion.Sid, q.ApplyGroupSid); Assert.Equal($"O:LSD:(A;;CC;;;{f.AdminClients.Sid})", q.AuthorizationSddl);
         Assert.All(c.Gpos.Where(g => g.Profile != "quarantine"), g => Assert.Contains(f.Exclusion.Sid!, g.DenyGroupSids));
@@ -54,7 +54,7 @@ public class CompilerTests {
     public void Optional_profiles_collapse_cleanly() {
         var minimal = new PlanInput { Name = "Min", InventoryId = f.Snapshot.Id };
         var c = Compiler.Compile(f.Saved(minimal));
-        Assert.Single(c.Gpos); Assert.Empty(c.Gpos[0].DenyGroupSids);
+        Assert.Single(c.Gpos); Assert.Equal([DomainSid + "-516", DomainSid + "-521"],c.Gpos[0].DenyGroupSids);
         Assert.Equal($"O:LSD:(A;;CC;;;{DomainSid}-515)", c.Gpos[0].AuthorizationSddl);
         Assert.Equal(7, PlanRules.Assess(minimal, f.Snapshot).Hosts.Count(h => h.Profile == "base"));
         var noMgmt = f.Plan with { Settings = f.Plan.Settings with { ManagementGroupId = null } };

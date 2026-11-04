@@ -25,6 +25,38 @@ public class DriftTests : IDisposable {
     }
 
     [Fact]
+    public void Main_scope_and_Authenticated_Users_apply_and_exemption_modes_are_not_ignored() {
+        var c = Compiler.Compile(f.Saved()); var clean = Clean(c);
+        Assert.False(Drift.Compare(c, clean with { Gpos = clean.Gpos.Select(g => g with { ApplyGroups = [g.ApplyGroups[0], "Authenticated Users"] }).ToArray() }).Clean);
+        Assert.False(Drift.Compare(c, clean with { Gpos = clean.Gpos.Select(g => g with { Rules = g.Rules.Select(r => r.Name == "IpsecStudio-Main" ? r with { RemoteAddress = "192.0.2.0/24" } : r).ToArray() }).ToArray() }).Clean);
+        Assert.False(Drift.Compare(c, clean with { Gpos = clean.Gpos.Select(g => g with { Rules = g.Rules.Select(r => r.Name == "IpsecStudio-Exempt" ? r with { Inbound = "Require" } : r).ToArray() }).ToArray() }).Clean);
+    }
+    [Theory]
+    [InlineData("10.74.1.0/24","10.74.1.0/255.255.255.0",true)]
+    [InlineData("10.74.1.10","10.74.1.10/32",true)]
+    [InlineData("10.74.1.5/24","10.74.1.0/255.255.255.0",true)]
+    [InlineData("10.74.1.0/24","10.74.1.0/255.255.0.0",false)]
+    [InlineData("10.74.1.0/24","10.74.1.0/255.0.255.0",false)]
+    public void Native_netmask_and_CIDR_are_compared_by_network_not_text(string expected,string actual,bool equal) => Assert.Equal(equal,Drift.SameAddresses([expected],actual));
+    [Theory]
+    [InlineData("protocol")][InlineData("localAddress")][InlineData("localPort")][InlineData("profile")][InlineData("phase1")][InlineData("quickMode")][InlineData("disabled")]
+    public void Rule_filter_and_reference_changes_are_reported(string field) {
+        var c=Compiler.Compile(f.Saved()); var baseline=Clean(c);
+        DriftRuleReading Change(DriftRuleReading r) => field switch {
+            "protocol"=>r with {Protocol="TCP"},"localAddress"=>r with {LocalAddress="192.0.2.1"},"localPort"=>r with {LocalPort="5985"},"profile"=>r with {Profile="Domain"},
+            "phase1"=>r with {Phase1AuthSet="OtherAuth"},"quickMode"=>r with {QuickModeCryptoSet="OtherCrypto"},_=>r with {Enabled=false}
+        };
+        var changed=baseline with {Gpos=baseline.Gpos.Select(g=>g with {Rules=g.Rules.Select(r=>r.Name=="IpsecStudio-Main" ? Change(r) : r).ToArray()}).ToArray()};
+        Assert.False(Drift.Compare(c,changed).Clean);
+    }
+    [Fact]
+    public void Apply_permission_uses_SID_even_when_the_display_name_changes() {
+        var c=Compiler.Compile(f.Saved());var baseline=Clean(c);
+        var reading=baseline with {Gpos=baseline.Gpos.Select(g=>g with {ApplyGroups=["Renamed group"],ApplySids=[c.Gpos.Single(x=>x.Name==g.Name).ApplyGroupSid]}).ToArray()};
+        Assert.True(Drift.Compare(c,reading).Clean);
+        Assert.False(Drift.Compare(c,reading with {Gpos=reading.Gpos.Select(g=>g with {ApplySids=[..g.ApplySids!,"S-1-5-11"]}).ToArray()}).Clean);
+    }
+    [Fact]
     public void Edited_rule_missing_gpo_wrong_marker_and_filtering_are_reported() {
         var c = Compiler.Compile(f.Saved());
         var clean = Clean(c);
@@ -94,15 +126,15 @@ public class DriftTests : IDisposable {
         var repo = new PlanRepository(folder);
         var saved = await repo.Save(null, f.Plan, f.Snapshot, PlanRules.Assess(f.Plan, f.Snapshot), "t");
         var c = Compiler.Compile(saved);
-        var dirty = JsonSerializer.Serialize(new { gpos = Array.Empty<object>(), external = new[] { new { name = "Corp-Legacy-IPsec", ruleCount = 1, links = new[] { "DC=lab,DC=ipsec,DC=test" } } } }, Json.Settings);
+        var dirty = JsonSerializer.Serialize(new { gpos = c.Gpos.Select(g=>new DriftGpoReading(g.Name,false,null,0,false,[],"","",[],[])).ToArray(), external = new[] { new { name = "Corp-Legacy-IPsec", ruleCount = 1, links = new[] { "DC=lab,DC=ipsec,DC=test" } } } }, Json.Settings);
         var runner = new FakeRunner { Reply = s => s.Contains("@{gpos=$gpos;external=$external") ? (true, dirty) : (true, "{}") };
         var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?> { ["Deployment:Enabled"] = "true" }).Build();
         var d = new Deployment(config, repo, runner, NullLogger<Deployment>.Instance);
         var report = await d.Drift(saved.Id, 1);
         Assert.False(report.Clean); Assert.Single(report.External);
-        await Assert.ThrowsAsync<ConflictException>(() => d.Execute(new(saved.Id, 1, c.Sha256, "apply", "ok"), "op"));
+        await Assert.ThrowsAsync<ConflictException>(() => d.Execute(new(saved.Id, 1, c.Sha256, "apply", "ok") { AcknowledgeScope=true }, "op"));
         Assert.DoesNotContain(runner.Scripts, s => s.Contains("New-GPO"));
-        var r = await d.Execute(new(saved.Id, 1, c.Sha256, "apply", "ok") { AcknowledgeDrift = true }, "op");
+        var r = await d.Execute(new(saved.Id, 1, c.Sha256, "apply", "ok") { AcknowledgeDrift = true, AcknowledgeScope=true }, "op");
         Assert.True(r.Succeeded);
         var log = await repo.ListDeployments(saved.Id);
         Assert.Contains(log, e => e.Action == "drift-acknowledged" && e.Output.Contains("Corp-Legacy-IPsec"));
@@ -114,6 +146,15 @@ public class DriftTests : IDisposable {
         Assert.True(rb.Succeeded);
     }
 
+    [Fact]
+    public async Task Empty_scan_is_not_evidence_and_missing_GPOs_are_not_clean() {
+        var repo=new PlanRepository(folder); var p=await repo.Save(null,f.Plan,f.Snapshot,PlanRules.Assess(f.Plan,f.Snapshot),"op");
+        var runner=new FakeRunner {Reply=_=>(true,"{}")};
+        var d=new Deployment(new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string,string?>{["Deployment:Enabled"]="true"}).Build(),repo,runner,NullLogger<Deployment>.Instance);
+        await Assert.ThrowsAsync<InvalidOperationException>(()=>d.Drift(p.Id,1));
+        runner.Reply=ScriptReplies.Default;
+        Assert.False((await d.Drift(p.Id,1)).Clean);
+    }
     sealed class FakeRunner : IScriptRunner {
         public readonly List<string> Scripts = [];
         public Func<string, (bool, string)> Reply = _ => (true, "{}");

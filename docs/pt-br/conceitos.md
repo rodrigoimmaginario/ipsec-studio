@@ -15,7 +15,7 @@ Isolamento de domínio: só computadores confiáveis (membros do domínio, auten
 | Sem IPsec | nenhuma (Deny Apply em todas) | — | — |
 | Fronteira | `IpsecStudio-Boundary` → grupo de fronteira | *Request/Request* | nenhuma |
 | Quarentena | `IpsecStudio-Quarantine` → grupo de exclusão | Entrada *Require*, saída *Request* | Allow apenas gestão |
-| Gestão (opcional) | `IpsecStudio-Management` → grupo de gestão | como a base | Allow grupo da base (sem Deny) |
+| Gestão (opcional) | `IpsecStudio-Management` → grupo de gestão | como a base | Allow base e exclusão (sem Deny; permite remediação mesmo com base personalizada) |
 
 Todas as GPOs contêm também: regra de isenção (`InboundSecurity None / OutboundSecurity None`) para os controladores de domínio e os endereços declarados; conjunto de main mode (padrão AES-256/SHA-256/DH14); conjunto de quick mode (ESP/null + ESP/AES-256; só AES nos perfis cifrados); autenticação Kerberos de máquina; isenção de ICMP.
 
@@ -37,6 +37,8 @@ Observações relevantes aprendidas em laboratório:
 - SAs são **bidirecionais** e reaproveitadas; por isso a quarentena tem GPO própria e a etapa *Atualizar* limpa SAs e tickets ao mudar grupos.
 - Mudanças de grupo só valem após renovação do ticket de máquina (`klist -li 0x3e7 purge`) ou reinício; o Studio faz isso na etapa *Atualizar*.
 
+O alcance da OU é estimado pela árvore do inventário; herança bloqueada, vínculos impostos e filtragem adicional não são um modelo completo de Group Policy. A verificação nos hosts continua obrigatória.
+
 ## Ondas
 
-A implantação em ondas não duplica GPOs: as GPOs são sempre uma por perfil. A onda controla **quem entra em cada grupo de perfil**, como no desenho original ("arrastar e soltar" a máquina para o grupo). O Studio grava a associação (por SID, nunca por nome), renova a identidade dos hosts da onda e compara a sonda com a simulação daquela onda antes de permitir a próxima.
+A implantação em ondas não duplica GPOs: as GPOs são sempre uma por perfil. A onda controla **quem entra em cada grupo de perfil**, como no desenho original ("arrastar e soltar" a máquina para o grupo). O Studio grava a associação por SID, registra quais membros realmente acrescentou, renova a identidade dos hosts da onda e exige política correspondente e evidência completa antes de permitir a próxima. As ondas não limitam a elegibilidade de membros que já estavam no grupo: Domain Computers na raiz já inclui o domínio inteiro. Reverta ondas em ordem inversa; a reversão não retira associações anteriores ao Studio.

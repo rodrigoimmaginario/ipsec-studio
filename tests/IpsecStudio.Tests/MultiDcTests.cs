@@ -136,10 +136,12 @@ public class WaveReplicationTests {
     public void Wave_scripts_wait_for_the_membership_on_every_reachable_dc() {
         var plan = f.Plan with { Waves = [new Wave { Id = WaveId, Name = "Piloto", Members = [new WaveMember { GroupId = f.SqlClients.Id, ComputerIds = [f.ClientNo.Id] }] }] };
         var w = Compiler.CompileWave(f.Saved(plan), WaveId);
-        Assert.Contains($"@{{g='{f.SqlClients.Sid}';c='{f.ClientNo.Sid}';present=$true}}", w.ApplyScript);
-        Assert.Contains($"@{{g='{f.SqlClients.Sid}';c='{f.ClientNo.Sid}';present=$false}}", w.RollbackScript);
+        Assert.Contains($"\"g\":\"{f.SqlClients.Sid}\",\"c\":\"{f.ClientNo.Sid}\"", w.ApplyScript);
+        Assert.Contains("$spec.pairs | ForEach-Object { @{g=$_.g;c=$_.c;present=$true}", w.ApplyScript);
+        Assert.Contains("$owned | ForEach-Object { @{g=$_.g;c=$_.c;present=$false}", w.RollbackScript);
         foreach (var s in new[] { w.ApplyScript, w.RollbackScript }) {
-            Assert.Contains("Get-ADGroupMember -Identity $e.g -Server $dc", s);
+            Assert.Contains("Test-StudioMembership $e.g $e.c $dc", s);
+            Assert.Contains("Get-ADComputer -Identity $c -Server $server -Properties MemberOf,PrimaryGroupID",s);
             Assert.Contains("replication=$repl", s);
         }
     }

@@ -18,6 +18,12 @@ Write-Host '== 2/3 UI render smoke (tests/browser/prototype-render.mjs) and site
 & node (Join-Path $root 'tests\release\version-check.mjs'); if($LASTEXITCODE -ne 0){throw 'Release consistency failed'}
 Write-Host '== 3/3 build'
 & $dotnet build (Join-Path $root 'app\IpsecStudio\IpsecStudio.csproj') --nologo -v q; if($LASTEXITCODE -ne 0){throw 'Build failed'}
+if($env:OS -eq 'Windows_NT'){
+  Write-Host '== Windows local API authentication/first-use smoke (no AD writes)'
+  & (Join-Path $root 'tests\browser\local-api.ps1')
+  & node (Join-Path $root 'tests\browser\reliability-flow.mjs')
+  if($LASTEXITCODE -ne 0){throw 'Real browser reliability flow failed'}
+}
 if($Publish){
   Write-Host '== 4/4 publish (win-x64, self-contained)'
   & $dotnet publish (Join-Path $root 'app\IpsecStudio\IpsecStudio.csproj') -c Release -r win-x64 --self-contained true -o (Join-Path $root 'artifacts\app') --nologo -v q

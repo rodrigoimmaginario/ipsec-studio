@@ -39,9 +39,9 @@ public class DebtPaymentTests : IDisposable {
         var repo = new PlanRepository(folder);
         var saved = await repo.Save(null, f.Plan, f.Snapshot, PlanRules.Assess(f.Plan, f.Snapshot), "t");
         var c = Compiler.Compile(saved);
-        var runner = new Runner { Reply = s => s.Contains("New-GPO") ? (true, "{\"marker\":\"m\",\"replication\":{\"dc1\":\"ok\",\"dc2\":\"timeout\"}}") : (true, "{}") };
+        var runner = new Runner { Reply = s => s.Contains("New-GPO") ? (true, "{\"marker\":\"m\",\"replication\":{\"dc1\":\"ok\",\"dc2\":\"timeout\"}}") : ScriptReplies.Default(s) };
         var d = new Deployment(new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?> { ["Deployment:Enabled"] = "true" }).Build(), repo, runner, NullLogger<Deployment>.Instance);
-        var r = await d.Execute(new(saved.Id, 1, c.Sha256, "apply", "ok"), "op");
+        var r = await d.Execute(new(saved.Id, 1, c.Sha256, "apply", "ok") { AcknowledgeScope=true }, "op");
         Assert.Equal(["dc2"], r.PendingDcs);
     }
 
@@ -50,7 +50,7 @@ public class DebtPaymentTests : IDisposable {
         var repo = new PlanRepository(folder);
         var saved = await repo.Save(null, f.Plan, f.Snapshot, PlanRules.Assess(f.Plan, f.Snapshot), "t");
         var reading = JsonSerializer.Serialize(new {
-            gpos = Array.Empty<object>(),
+            gpos = Compiler.Compile(saved).Gpos.Select(g=>new DriftGpoReading(g.Name,false,null,0,false,[],"","",[],[])).ToArray(),
             external = new[] { new { name = "Corp-Legacy", ruleCount = 2, links = new[] { "OU=Servers,DC=lab,DC=ipsec,DC=test" }, computers = new[] { "db1", "printsrv" } } },
             scan = new { total = 312, opened = 5, filtered = true } }, Json.Settings);
         var runner = new Runner { Reply = s => s.Contains("@{gpos=$gpos;external=$external") ? (true, reading) : (true, "{}") };

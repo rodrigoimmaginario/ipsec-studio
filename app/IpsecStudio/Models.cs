@@ -14,6 +14,7 @@ public sealed record DirectoryObject {
     public int UnresolvedMemberCount { get; init; }
     public string? PolicyPath { get; init; }
     public string? PolicyLinks { get; init; }
+    public bool? BlocksInheritance { get; init; }
     public bool PolicyFileReadable { get; init; }
 }
 public sealed record InventorySnapshot {
@@ -119,7 +120,9 @@ public sealed record PlanInput {
 }
 
 // ---- Assessment: deterministic resolution of the plan against one inventory snapshot. ----
-public sealed record HostProfile(string ComputerId, string Name, string? Ip, string Profile, string? RestrictedId, string[] Memberships, bool Excluded, string[] Conflicts);
+public sealed record HostProfile(string ComputerId, string Name, string? Ip, string Profile, string? RestrictedId, string[] Memberships, bool Excluded, string[] Conflicts) {
+    public bool ScopeKnown { get; init; } = true;
+}
 public sealed record ProfileSummary(string Key, string Name, string[] ComputerIds, string[] Addresses, string[] Notes);
 public sealed record PlanAssessment(HostProfile[] Hosts, ProfileSummary[] Profiles, string[] ExemptAddresses, string[] DomainControllerAddresses, string[] Warnings);
 
@@ -134,6 +137,8 @@ public sealed record Compilation(string PlanId, int PlanVersion, string Snapshot
     // Settings written into every GPO; kept so the Studio can compare them with what AD holds later.
     public CryptoSettings Crypto { get; init; } = new();
     public bool ExemptIcmp { get; init; }
+    public string[] SecureSubnets { get; init; } = [];
+    public bool BroadScope { get; init; }
 }
 
 public sealed record SavedPlan(string Id, int Version, string Name, DateTimeOffset CreatedAt, DateTimeOffset UpdatedAt, string SavedBy, PlanInput Input, InventorySnapshot Inventory, PlanAssessment Assessment) {

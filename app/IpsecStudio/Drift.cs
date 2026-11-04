@@ -3,14 +3,27 @@ using System.Text.Json;
 namespace IpsecStudio;
 
 // What the directory holds for one Studio GPO, as read by the drift script (names/SIDs only, no free text interpreted).
-public sealed record DriftRuleReading(string Name, string Inbound, string Outbound, bool RequireAuthorization, string RemoteAddress);
+public sealed record DriftRuleReading(string Name, string Inbound, string Outbound, bool RequireAuthorization, string RemoteAddress) {
+    public bool Enabled { get; init; } = true;
+    public string LocalAddress { get; init; } = "Any";
+    public string Protocol { get; init; } = "Any";
+    public string LocalPort { get; init; } = "Any";
+    public string RemotePort { get; init; } = "Any";
+    public string Mode { get; init; } = "Transport";
+    public string Profile { get; init; } = "Any";
+    public string Phase1AuthSet { get; init; } = "IpsecStudio-P1";
+    public string QuickModeCryptoSet { get; init; } = "IpsecStudio-QM";
+}
 public sealed record DriftGpoReading(string Name, bool Exists, string? Marker, int Version, bool Linked, DriftRuleReading[] Rules, string AuthorizationSddl, string Exemptions, string[] ApplyGroups, string[] DenySids) {
+    public bool Enabled { get; init; } = true;
+    public string[]? ApplySids { get; init; }
     public string[] Errors { get; init; } = [];
     public DriftCryptoReading? Crypto { get; init; }
 }
 // Proposals as "Encryption-Hash-KeyExchange" (main mode) and "Encapsulation-Encryption-ESPHash-MaxMinutes" (quick mode), in preference order.
 public sealed record DriftCryptoReading(string[] MainMode, int MainModeMinutes, string[] QuickMode, string[] Phase1);
 public sealed record DriftExternalReading(string Name, int RuleCount, string[] Links) {
+    public string? Marker { get; init; }
     // Computers under the containers where the GPO is linked and enabled (block-inheritance, enforcement and security filtering not evaluated).
     public string[] Computers { get; init; } = [];
     public string[] InPlan { get; init; } = [];
@@ -32,9 +45,21 @@ public static class Drift {
             if (r.Marker != c.Marker) diff.Add(L.T("drift.marker", c.Marker, r.Marker ?? ""));
             foreach (var e in r.Errors ?? []) diff.Add(L.T("drift.readError", e));
             if (!r.Linked) diff.Add(L.T("drift.unlinked"));
+            if (!r.Enabled) diff.Add(L.T("drift.field", g.Name, "enabled", true, false));
+            foreach (var rule in r.Rules.Where(x => !x.Enabled)) diff.Add(L.T("drift.field", rule.Name, "enabled", true, false));
+            foreach (var duplicate in r.Rules.GroupBy(x => x.Name).Where(x => x.Count() > 1)) diff.Add(L.T("drift.ruleExtra", duplicate.Key));
+            foreach (var rule in r.Rules) {
+                void Field(string name,string expected,string found) { if(!expected.Equals(found,StringComparison.OrdinalIgnoreCase)) diff.Add(L.T("drift.field",rule.Name,name,expected,found)); }
+                Field("localAddress","Any",rule.LocalAddress); Field("protocol","Any",rule.Protocol);
+                Field("localPort","Any",rule.LocalPort); Field("remotePort","Any",rule.RemotePort);
+                Field("mode","Transport",rule.Mode); Field("profile","Any",rule.Profile);
+                if(rule.Name=="IpsecStudio-Main") { Field("phase1AuthSet","IpsecStudio-P1",rule.Phase1AuthSet); Field("quickModeCryptoSet","IpsecStudio-QM",rule.QuickModeCryptoSet); }
+            }
             var main = r.Rules.FirstOrDefault(x => x.Name == "IpsecStudio-Main");
             if (main is null) diff.Add(L.T("drift.ruleMissing", "IpsecStudio-Main"));
             else {
+                var scope = c.SecureSubnets.Length == 0 ? new[] { "Any" } : c.SecureSubnets;
+                if (!SameAddresses(scope, main.RemoteAddress)) diff.Add(L.T("drift.field", main.Name, "remoteAddress", string.Join(",", scope), main.RemoteAddress));
                 if (!main.Inbound.Equals(g.Inbound, StringComparison.OrdinalIgnoreCase)) diff.Add(L.T("drift.field", "IpsecStudio-Main", "inbound", g.Inbound, main.Inbound));
                 if (!main.Outbound.Equals(g.Outbound, StringComparison.OrdinalIgnoreCase)) diff.Add(L.T("drift.field", "IpsecStudio-Main", "outbound", g.Outbound, main.Outbound));
                 if (main.RequireAuthorization != g.RequireAuthorization) diff.Add(L.T("drift.field", "IpsecStudio-Main", "requireAuthorization", g.RequireAuthorization, main.RequireAuthorization));
@@ -42,15 +67,20 @@ public static class Drift {
             var exempt = r.Rules.FirstOrDefault(x => x.Name == "IpsecStudio-Exempt");
             if (c.ExemptAddresses.Length > 0 && exempt is null) diff.Add(L.T("drift.ruleMissing", "IpsecStudio-Exempt"));
             else if (exempt is not null) {
-                var found = exempt.RemoteAddress.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Order(StringComparer.Ordinal);
-                if (!found.SequenceEqual(c.ExemptAddresses.Order(StringComparer.Ordinal))) diff.Add(L.T("drift.field", "IpsecStudio-Exempt", "remoteAddress", string.Join(",", c.ExemptAddresses), exempt.RemoteAddress));
+                if (!exempt.Inbound.Equals("None", StringComparison.OrdinalIgnoreCase) || !exempt.Outbound.Equals("None", StringComparison.OrdinalIgnoreCase) || exempt.RequireAuthorization)
+                    diff.Add(L.T("drift.field", exempt.Name, "security", "None/None/false", $"{exempt.Inbound}/{exempt.Outbound}/{exempt.RequireAuthorization}"));
+                if (!SameAddresses(c.ExemptAddresses,exempt.RemoteAddress)) diff.Add(L.T("drift.field", "IpsecStudio-Exempt", "remoteAddress", string.Join(",", c.ExemptAddresses), exempt.RemoteAddress));
             }
             foreach (var extra in r.Rules.Where(x => x.Name is not ("IpsecStudio-Main" or "IpsecStudio-Exempt"))) diff.Add(L.T("drift.ruleExtra", extra.Name));
             // Windows reports an absent authorization list as "NotConfigured"; the compiler expresses it as null.
             var foundAuth = Normalize(r.AuthorizationSddl);
             if ((g.AuthorizationSddl ?? "") != foundAuth) diff.Add(L.T("drift.field", g.Name, "authorizationList", g.AuthorizationSddl ?? "-", foundAuth == "" ? "-" : foundAuth));
-            var applyExtra = r.ApplyGroups.Where(a => !a.Equals(g.ApplyGroup, StringComparison.OrdinalIgnoreCase) && !a.Equals("Authenticated Users", StringComparison.OrdinalIgnoreCase)).ToArray();
-            if (applyExtra.Length > 0 || !r.ApplyGroups.Any(a => a.Equals(g.ApplyGroup, StringComparison.OrdinalIgnoreCase))) diff.Add(L.T("drift.field", g.Name, "apply", g.ApplyGroup, string.Join(",", r.ApplyGroups)));
+            if (r.ApplySids is not null) {
+                if (!r.ApplySids.ToHashSet().SetEquals([g.ApplyGroupSid])) diff.Add(L.T("drift.field", g.Name, "applySid", g.ApplyGroupSid, string.Join(",",r.ApplySids)));
+            } else {
+                var applyExtra = r.ApplyGroups.Where(a => !a.Equals(g.ApplyGroup, StringComparison.OrdinalIgnoreCase)).ToArray();
+                if (applyExtra.Length > 0 || !r.ApplyGroups.Any(a => a.Equals(g.ApplyGroup, StringComparison.OrdinalIgnoreCase))) diff.Add(L.T("drift.field", g.Name, "apply", g.ApplyGroup, string.Join(",", r.ApplyGroups)));
+            }
             if (!r.DenySids.ToHashSet().SetEquals(g.DenyGroupSids)) diff.Add(L.T("drift.field", g.Name, "denyApply", string.Join(",", g.DenyGroupSids), string.Join(",", r.DenySids)));
             var want = ExpectedCrypto(c, g);
             if (r.Crypto is null) diff.Add(L.T("drift.cryptoUnread"));
@@ -74,6 +104,23 @@ public static class Drift {
         var enc = $"ESP-{k.QuickModeEncryption}-{k.QuickModeIntegrity}-{k.QuickModeLifetimeMinutes}";
         var plain = $"ESP-None-{k.QuickModeIntegrity}-{k.QuickModeLifetimeMinutes}";
         return new([$"{k.MainModeEncryption}-{k.MainModeHash}-{k.KeyExchange}"], k.MainModeLifetimeMinutes, g.Encryption ? [enc] : [plain, enc], ["MachineKerb"]);
+    }
+    // NetSecurity returns IPv4 masks as dotted decimals even when the compiler supplied CIDR.
+    public static bool SameAddresses(IEnumerable<string> expected, string found) => expected.Select(CanonicalAddress).ToHashSet(StringComparer.OrdinalIgnoreCase).SetEquals(found.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Select(CanonicalAddress));
+    static string CanonicalAddress(string value) {
+        var p=value.Trim().Split('/');
+        if(p.Length>2 || !System.Net.IPAddress.TryParse(p[0],out var ip) || ip.AddressFamily!=System.Net.Sockets.AddressFamily.InterNetwork) return value.Trim();
+        var bits=32;
+        if(p.Length==2 && !int.TryParse(p[1],out bits)) {
+            if(!System.Net.IPAddress.TryParse(p[1],out var netmask) || netmask.AddressFamily!=System.Net.Sockets.AddressFamily.InterNetwork) return value.Trim();
+            var m=System.Buffers.Binary.BinaryPrimitives.ReadUInt32BigEndian(netmask.GetAddressBytes());var inverse=~m;
+            if((inverse & unchecked(inverse+1))!=0) return value.Trim();
+            bits=System.Numerics.BitOperations.PopCount(m);
+        }
+        if(bits is <0 or >32) return value.Trim();
+        var mask=bits==0 ? 0u : uint.MaxValue << (32-bits);
+        var network=System.Buffers.Binary.BinaryPrimitives.ReadUInt32BigEndian(ip.GetAddressBytes()) & mask;
+        return $"{network>>24}.{(network>>16)&255}.{(network>>8)&255}.{network&255}/{bits}";
     }
     static string Normalize(string? value) => value is null || value.Equals("NotConfigured", StringComparison.OrdinalIgnoreCase) ? "" : value.Trim();
     // Only GPOs with an enabled link can affect computers; unlinked ones are listed without blocking (CV4.DS7).

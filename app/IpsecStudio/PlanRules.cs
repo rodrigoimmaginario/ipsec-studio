@@ -9,7 +9,7 @@ public static partial class PlanRules {
     public static bool IsComputer(DirectoryObject o) => o.Kind is "server" or "workstation" or "dc" or "computer";
     [GeneratedRegex(@"\AS-1-5-21-\d{1,10}-\d{1,10}-\d{1,10}-\d{1,10}\z")] private static partial Regex DomainSidPattern();
     [GeneratedRegex(@"\AS-1-5-21-\d{1,10}-\d{1,10}-\d{1,10}\z")] private static partial Regex DomainRootSidPattern();
-    [GeneratedRegex(@"\A[A-Za-z0-9][A-Za-z0-9 ._-]{0,63}\z")] private static partial Regex GroupNamePattern();
+    [GeneratedRegex(@"\A[\p{L}\p{N}][\p{L}\p{N} ._-]{0,63}\z")] private static partial Regex GroupNamePattern();
     public static bool ValidSid(string? sid) => sid is not null && DomainSidPattern().IsMatch(sid);
     public static bool ValidGroupName(string name) => GroupNamePattern().IsMatch(name);
     [GeneratedRegex(@"\A((CN|OU)=[^,=]+,)+(DC=[^,=]+,)*DC=[^,=]+\z", RegexOptions.IgnoreCase)] private static partial Regex ContainerDnPattern();
@@ -77,6 +77,7 @@ public static partial class PlanRules {
         if (DateTimeOffset.UtcNow - snapshot.CapturedAt > TimeSpan.FromMinutes(30)) warnings.Add(L.T("inventory.old"));
         foreach (var cidr in input.Settings.SecureSubnets) Require(ValidCidr(cidr), L.T("subnet.invalid", cidr));
         Require(input.Settings.LinkTarget == "domain" || (map.Values.Any(o => o.Kind == "ou" && o.Dn.Equals(input.Settings.LinkTarget, StringComparison.OrdinalIgnoreCase))), L.T("link.invalid"));
+        var scope=Authorization.Scopes(input,snapshot);
         var c = input.Settings.Crypto;
         Require(c.MainModeEncryption is "AES128" or "AES192" or "AES256" && c.MainModeHash is "SHA256" or "SHA384" && c.KeyExchange is "DH14" or "DH19" or "DH20" or "DH24", L.T("crypto.mm"));
         Require(c.QuickModeEncryption is "AES128" or "AES192" or "AES256" or "AESGCM128" or "AESGCM256" && c.QuickModeIntegrity is "SHA256" or "AESGMAC256", L.T("crypto.qm"));
@@ -112,9 +113,10 @@ public static partial class PlanRules {
             if (e.Included) exemptAddresses.Add(e.Address);
         }
         var externalIds = new HashSet<string>();
+        var externalNames = snapshot.Objects.Where(IsComputer).Select(o=>o.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
         foreach (var x in input.ExternalHosts) {
-            if (x is null) throw new ValidationException(L.T("external.null")); Require(Guid.TryParseExact(x.Id, "D", out _) && externalIds.Add(x.Id), L.T("external.id"));
-            Text(x.Name, 64, L.T("external.name")); Require(ValidIpv4(x.Address), L.T("external.address", x.Name));
+            if (x is null) throw new ValidationException(L.T("external.null")); Require(Guid.TryParseExact(x.Id, "D", out _) && !map.ContainsKey(x.Id) && externalIds.Add(x.Id), L.T("external.id"));
+            Text(x.Name, 64, L.T("external.name")); Require(externalNames.Add(x.Name), L.T("external.unique")); Require(ValidIpv4(x.Address), L.T("external.address", x.Name));
         }
         if (input.Settings.GroupContainer is not null) Require(ValidContainerDn(input.Settings.GroupContainer), L.T("groups.container"));
         var newGroupNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -128,11 +130,12 @@ public static partial class PlanRules {
         var waveIds = new HashSet<string>();
         foreach (var w in input.Waves) {
             if (w is null || w.Members is null) throw new ValidationException(L.T("plan.incomplete"));
+            Require(w.Members.Length>0,L.T("waves.empty"));
             Require(Guid.TryParseExact(w.Id, "D", out _) && waveIds.Add(w.Id), L.T("waves.id"));
             Text(w.Name, 100, L.T("waves.name"));
             foreach (var m in w.Members) {
                 Require(m is not null && profileGroupIds.Contains(m.GroupId), L.T("waves.group", w.Name));
-                Require(m!.ComputerIds is { Length: > 0 and <= 10000 } && m.ComputerIds.All(c => map.TryGetValue(c, out var o) && IsComputer(o) && o.Kind != "dc" && ValidSid(o.Sid)), L.T("waves.computer", w.Name));
+                Require(m!.ComputerIds is { Length: > 0 and <= 10000 } && m.ComputerIds.All(c => map.TryGetValue(c, out var o) && IsComputer(o) && o.Kind != "dc" && ValidSid(o.Sid) && scope[c]!=false), L.T("waves.computer", w.Name));
             }
             warnings.Add(L.T("waves.pending", w.Name, w.Members.Sum(m => m.ComputerIds.Length)));
         }
@@ -159,10 +162,13 @@ public static partial class PlanRules {
                 if (o.Ip is not null && exemptAddresses.Any(a => a == o.Ip || (ValidCidr(a) && InCidr(o.Ip, a)))) conflicts.Add(L.T("conflict.exemptAddress"));
             }
             var isExcluded = excluded.Contains(o.Id);
-            if (isExcluded) { memberships.Add(map[input.ExclusionGroupId!].Name); if (o.Kind != "dc") { restrictedId = null; profile = "quarantine"; } }
+            if (isExcluded) { memberships.Add(map[input.ExclusionGroupId!].Name); if (o.Kind != "dc") { restrictedId = null; profile = "quarantine"; conflicts.Clear(); } }
+            if (o.Kind != "dc" && scope[o.Id]==false) { profile = "none"; restrictedId = null; conflicts.Clear(); }
             if (conflicts.Count > 0) warnings.Add(L.T("host.conflicts", o.Name, string.Join(" ", conflicts)));
-            hosts.Add(new(o.Id, o.Name, o.Ip, profile, restrictedId, memberships.Distinct().ToArray(), isExcluded, conflicts.ToArray()));
+            hosts.Add(new(o.Id, o.Name, o.Ip, profile, restrictedId, memberships.Distinct().ToArray(), isExcluded, conflicts.ToArray()){ScopeKnown=scope[o.Id].HasValue});
         }
+        var unknownScope=hosts.Count(h=>h.Profile!="dc" && !h.ScopeKnown);
+        if(unknownScope>0) warnings.Add(L.T("scope.unknown",unknownScope));
         var profiles = new List<ProfileSummary> {
             new("base", L.T("profile.base", baseGroup.Name), hosts.Where(h => h.Profile == "base").Select(h => h.ComputerId).ToArray(), [], [ModeText(input.BaseMode)]),
         };

@@ -11,10 +11,25 @@ public sealed class DirectoryReader(IConfiguration config, IWebHostEnvironment e
     public string? LastError { get; private set; }
     // Empty = the domain DNS name: the AD cmdlets then locate any reachable DC (recommended with several DCs).
     public string Server => string.IsNullOrWhiteSpace(config["Directory:Server"]) ? Domain : config["Directory:Server"]!.Trim();
-    public string Domain => config["Directory:ExpectedDomain"] ?? throw new InvalidOperationException("Domain is required.");
+    public string Domain => (config["Directory:ExpectedDomain"] ?? "").Trim();
+    public string SuggestedDomain => System.Net.NetworkInformation.IPGlobalProperties.GetIPGlobalProperties().DomainName;
+    public static string SettingsPath(IConfiguration config) => Path.Combine(Path.GetFullPath(config["Storage:Root"] ?? throw new InvalidOperationException("Storage path required.")), "directory.json");
+    public async Task Configure(string? domain) {
+        domain = (domain ?? "").Trim();
+        if (!Regex.IsMatch(domain, @"\A[a-zA-Z0-9][a-zA-Z0-9.-]{0,252}\z") || Uri.CheckHostName(domain) != UriHostNameType.Dns || domain.EndsWith('.')) throw new ValidationException(L.T("directory.invalid"));
+        await gate.WaitAsync();
+        try {
+            var path = SettingsPath(config); Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
+            var temp = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
+            try { await File.WriteAllTextAsync(temp, JsonSerializer.Serialize(new { Directory = new { ExpectedDomain = domain } })); File.Move(temp,path,true); }
+            finally { if(File.Exists(temp)) File.Delete(temp); }
+            config["Directory:ExpectedDomain"] = domain; Current = null; LastError = null;
+        } finally { gate.Release(); }
+    }
     public async Task<InventorySnapshot> Refresh(CancellationToken cancellation) {
+        if (Domain.Length == 0) throw new ValidationException(L.T("directory.confirm"));
         if (!Regex.IsMatch(Server, @"\A[a-zA-Z0-9.-]{1,253}\z") || !Regex.IsMatch(Domain, @"\A[a-zA-Z0-9.-]{1,253}\z"))
-            throw new InvalidOperationException("Invalid directory configuration.");
+            throw new ValidationException(L.T("directory.invalid"));
         await gate.WaitAsync(cancellation);
         try {
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellation);

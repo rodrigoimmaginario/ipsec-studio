@@ -12,7 +12,7 @@ try {
     $computers=@(Get-ADComputer -Filter * -Server $Server -Properties OperatingSystem,IPv4Address,userAccountControl,PrimaryGroupID,SID)
     $users=@(Get-ADUser -Filter * -Server $Server -Properties PrimaryGroupID)
     $groups=@(Get-ADGroup -Filter * -Server $Server -Properties Member,GroupCategory,SID)
-    $ous=@(Get-ADOrganizationalUnit -Filter * -Server $Server -Properties gPLink)
+    $ous=@(Get-ADOrganizationalUnit -Filter * -Server $Server -Properties gPLink,gPOptions)
     $gpos=@(Get-ADObject -LDAPFilter '(objectClass=groupPolicyContainer)' -SearchBase "CN=Policies,CN=System,$base" -Server $Server -Properties displayName,gPCFileSysPath)
     $domainObject=Get-ADObject -Identity $base -Server $Server -Properties gPLink
     $records=[Collections.Generic.List[object]]::new()
@@ -24,15 +24,22 @@ try {
         $r=Record $obj $kind;$r.os=$obj.OperatingSystem;$r.ip=$obj.IPv4Address;$r.enabled=[bool]$obj.Enabled;$records.Add($r)
     }
     foreach($obj in $users){$r=Record $obj 'user';$r.enabled=[bool]$obj.Enabled;$records.Add($r)}
+    # Primary-group members are indexed once; scanning every account for each group made large inventories quadratic.
+    $primary=@{}
+    foreach($member in @($computers)+@($users)){
+        $key="$($domain.DomainSID.Value)-$($member.PrimaryGroupID)"
+        if(-not $primary.ContainsKey($key)){ $primary[$key]=[Collections.Generic.List[string]]::new() }
+        $primary[$key].Add([string]$member.ObjectGUID)
+    }
     foreach($obj in $groups){
         $r=Record $obj $(if($obj.GroupCategory -eq 'Security'){'group'}else{'distributionGroup'})
         $ids=[Collections.Generic.HashSet[string]]::new()
         foreach($dn in @($obj.Member)){if($map.ContainsKey($dn)){[void]$ids.Add($map[$dn])}else{$r.unresolvedMemberCount++}}
         # AD does not list primary-group members in the member attribute. Include them explicitly.
-        foreach($member in @($computers)+@($users)){if("$($domain.DomainSID.Value)-$($member.PrimaryGroupID)" -eq $obj.SID.Value){[void]$ids.Add([string]$member.ObjectGUID)}}
+        if($primary.ContainsKey($obj.SID.Value)){ foreach($id in $primary[$obj.SID.Value]){ [void]$ids.Add($id) } }
         $r.memberIds=@($ids | Sort-Object);$records.Add($r)
     }
-    foreach($obj in $ous){$r=Record $obj 'ou';$r.policyLinks=[string]$obj.gPLink;$records.Add($r)}
+    foreach($obj in $ous){$r=Record $obj 'ou';$r.policyLinks=[string]$obj.gPLink;$r.blocksInheritance=[bool]([int](@($obj.gPOptions)[0]) -band 1);$records.Add($r)}
     $warnings=[Collections.Generic.List[string]]::new()
     foreach($obj in $gpos){
         $r=Record $obj 'gpo';$r.name=[string]$obj.displayName;$r.policyPath=[string]$obj.gPCFileSysPath

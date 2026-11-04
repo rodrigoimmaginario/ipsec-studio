@@ -74,4 +74,8 @@ Mudanças em `Simulator.cs`, `Compiler.cs` ou `Deployment.cs` alteram o que o Wi
 
 ## Cobertura
 
-`scripts/coverage.ps1` lê o relatório Cobertura e imprime linhas cobertas por arquivo. `Program.cs`, `DirectoryReader.cs` e `Deployment.cs` dependem de AD, WinRM e PowerShell reais e não entram no gate; sua garantia vem do laboratório.
+`scripts/coverage.ps1` exige ao menos 85% das linhas C# de `PlanRules`, `Simulator`, `Compiler` e `Deployment`. **Cobertura C# não mede execução das strings PowerShell.** `Program.cs` e o coletor de AD precisam também de testes reais.
+
+No Windows, o gate executa PowerShell com AD simulado para testar propriedade/interrupção de ondas e analisar a sintaxe dos roteiros; testa ainda a API real em armazenamento isolado (anônimo 401, operador 200, POST sem token 403) e o fluxo no Edge com API de exemplo (salvar/aplicar v1, editar/salvar v2, reverter v1). Esses testes não alteram o AD. É necessário Edge instalado; `EDGE` permite informar outro caminho.
+
+O CI Linux não executa esses testes Windows; os testes específicos aparecem como ignorados. A regressão em AD real e o aceite do operador continuam obrigatórios. A rotina privada exige aprovação explícita de custo antes de ligar Azure e desaloca as VMs ao terminar.

@@ -9,6 +9,7 @@ namespace IpsecStudio;
 // The scripts are constant code plus one JSON literal built only from validated, typed values. No free text reaches PowerShell.
 public static partial class Compiler {
     [GeneratedRegex(@"[^A-Za-z0-9]")] private static partial Regex NonAlnum();
+    public static bool BroadScope(SavedPlan plan) => plan.Input.Settings.LinkTarget == "domain" && (plan.Input.BaseGroupId is null || plan.Input.BaseGroupId == PlanRules.DomainComputers(plan.Inventory)?.Id);
     public static Compilation Compile(SavedPlan plan) {
         var input = plan.Input; var snapshot = plan.Inventory;
         var a = PlanRules.Assess(input, snapshot); // never trust the stored assessment
@@ -31,9 +32,7 @@ public static partial class Compiler {
         string Name(string suffix) { var n = "IpsecStudio-" + suffix; if (!names.Add(n)) throw new ValidationException(L.T("compile.dupName", n)); return n; }
         foreach (var r in input.Restricted.Where(r => r.Included)) {
             var slug = NonAlnum().Replace(r.Name, ""); if (slug.Length == 0) throw new ValidationException(L.T("compile.slug", r.Name));
-            var allow = new List<string> { Sid(r.ProtectedGroupId) };
-            allow.Add(r.AccessGroupId is null ? baseGroup.Sid! : Sid(r.AccessGroupId));
-            if (input.Settings.ManagementGroupId is not null) allow.Add(Sid(input.Settings.ManagementGroupId));
+            var allow = Authorization.AllowedGroups(input, baseGroup.Id, "restricted", r).Select(Sid);
             gpos.Add(new(Name("Restricted-" + slug[..Math.Min(24, slug.Length)]), "restricted", map[r.ProtectedGroupId].Name, Sid(r.ProtectedGroupId), [], sIn, sOut, r.Encryption, true, Sddl(allow, true), a.Hosts.Where(h => h.RestrictedId == r.Id).Select(h => h.ComputerId).ToArray()));
             otherGroups.Add(Sid(r.ProtectedGroupId));
         }
@@ -42,20 +41,23 @@ public static partial class Compiler {
             otherGroups.Add(Sid(input.BoundaryGroupId));
         }
         if (input.Settings.ManagementGroupId is not null) {
-            gpos.Add(new(Name("Management"), "management", map[input.Settings.ManagementGroupId].Name, Sid(input.Settings.ManagementGroupId), [], bIn, bOut, false, true, Sddl([baseGroup.Sid!], false), a.Hosts.Where(h => h.Profile == "management").Select(h => h.ComputerId).ToArray()));
+            gpos.Add(new(Name("Management"), "management", map[input.Settings.ManagementGroupId].Name, Sid(input.Settings.ManagementGroupId), [], bIn, bOut, false, true, Sddl(Authorization.AllowedGroups(input, baseGroup.Id, "management").Select(Sid), false), a.Hosts.Where(h => h.Profile == "management").Select(h => h.ComputerId).ToArray()));
             otherGroups.Add(Sid(input.Settings.ManagementGroupId));
         }
         if (input.ExclusionGroupId is not null) {
-            var allow = input.Settings.ManagementGroupId is null ? Array.Empty<string>() : [Sid(input.Settings.ManagementGroupId)];
+            var allow = Authorization.AllowedGroups(input, baseGroup.Id, "quarantine").Select(Sid);
             gpos.Add(new(Name("Quarantine"), "quarantine", map[input.ExclusionGroupId].Name, exclusionSid!, [], sIn, sOut, false, true, Sddl(allow, false), a.Hosts.Where(h => h.Profile == "quarantine").Select(h => h.ComputerId).ToArray()));
             otherGroups.Add(exclusionSid!);
         }
         var denyBase = otherGroups.ToList();
         if (input.NoPolicyGroupId is not null) denyBase.Add(Sid(input.NoPolicyGroupId));
-        gpos.Insert(0, new(Name("Base"), "base", baseGroup.Name, baseGroup.Sid!, denyBase.Distinct().ToArray(), bIn, bOut, false, true, Sddl([baseGroup.Sid!], true), a.Hosts.Where(h => h.Profile == "base").Select(h => h.ComputerId).ToArray()));
+        gpos.Insert(0, new(Name("Base"), "base", baseGroup.Name, baseGroup.Sid!, denyBase.Distinct().ToArray(), bIn, bOut, false, true, Sddl(Authorization.AllowedGroups(input, baseGroup.Id, "base").Select(Sid), true), a.Hosts.Where(h => h.Profile == "base").Select(h => h.ComputerId).ToArray()));
         // Every non-base GPO denies the no-policy group; every non-quarantine GPO denies the exclusion group (quarantine wins over any other profile).
         var np = input.NoPolicyGroupId is null ? null : Sid(input.NoPolicyGroupId);
-        gpos = gpos.Select(g => g.Profile == "base" ? g : g with { DenyGroupSids = [.. g.DenyGroupSids, .. (np is null ? [] : new[] { np }), .. (exclusionSid is null || g.Profile == "quarantine" ? [] : new[] { exclusionSid })] }).ToList();
+        gpos = gpos.Select(g => g.Profile == "base" ? g : g with { DenyGroupSids = [.. g.DenyGroupSids, .. (np is null || g.Profile == "quarantine" ? [] : new[] { np }), .. (exclusionSid is null || g.Profile == "quarantine" ? [] : new[] { exclusionSid })] }).ToList();
+        // Never deliver Studio policy to DCs, even through an accidental nested profile membership; protect future RODCs too.
+        var dcDeny = new[] { snapshot.DomainSid + "-516", snapshot.DomainSid + "-521" };
+        gpos = gpos.Select(g => g with { DenyGroupSids = g.DenyGroupSids.Concat(dcDeny).Distinct().ToArray() }).ToList();
         foreach (var g in gpos) if (!PlanRules.ValidGroupName(g.ApplyGroup)) throw new ValidationException(L.T("compile.groupName", g.ApplyGroup));
         var exempt = a.ExemptAddresses.Concat(input.Settings.ExemptDomainControllers ? a.DomainControllerAddresses : []).Distinct().Order(StringComparer.Ordinal).ToArray();
         var marker = $"IpsecStudio plan {plan.Id} v{plan.Version}";
@@ -63,36 +65,21 @@ public static partial class Compiler {
             domain = snapshot.Domain, domainSid = snapshot.DomainSid, marker, linkTarget = input.Settings.LinkTarget,
             secureSubnets = input.Settings.SecureSubnets, exemptAddresses = exempt, exemptIcmp = input.Settings.ExemptIcmp,
             crypto = input.Settings.Crypto, replicationWaitSeconds = input.Settings.ReplicationWaitSeconds,
-            gpos = gpos.Select(g => new { g.Name, g.Profile, g.ApplyGroup, g.DenyGroupSids, g.Inbound, g.Outbound, g.Encryption, g.RequireAuthorization, g.AuthorizationSddl })
+            gpos = gpos.Select(g => new { g.Name, g.Profile, g.ApplyGroup, g.ApplyGroupSid, g.DenyGroupSids, g.Inbound, g.Outbound, g.Encryption, g.RequireAuthorization, g.AuthorizationSddl })
         };
         var json = JsonSerializer.Serialize(spec, new JsonSerializerOptions(JsonSerializerDefaults.Web));
         if (json.Contains('\n') || json.Contains("'@")) throw new ValidationException(L.T("compile.spec"));
         var apply = ApplyTemplate.Replace("__PINPDC__", PinPdc).Replace("__SPEC__", json);
         var rollback = RollbackTemplate.Replace("__PINPDC__", PinPdc).Replace("__SPEC__", json);
         var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(apply + "\n--\n" + rollback))).ToLowerInvariant();
-        return new(plan.Id, plan.Version, snapshot.Id, snapshot.Domain, snapshot.DomainSid, marker, gpos.ToArray(), exempt, apply, rollback, hash) { Crypto = input.Settings.Crypto, ExemptIcmp = input.Settings.ExemptIcmp };
+        return new(plan.Id, plan.Version, snapshot.Id, snapshot.Domain, snapshot.DomainSid, marker, gpos.ToArray(), exempt, apply, rollback, hash) { Crypto = input.Settings.Crypto, ExemptIcmp = input.Settings.ExemptIcmp, SecureSubnets = input.Settings.SecureSubnets, BroadScope = BroadScope(plan) };
     }
     // Wave: membership changes only. Everything is addressed by SID; names never reach PowerShell.
-    public static WaveCompilation CompileWave(SavedPlan plan, string waveId) {
-        var a = PlanRules.Assess(plan.Input, plan.Inventory);
-        var wave = plan.Input.Waves.FirstOrDefault(w => w.Id == waveId) ?? throw new ValidationException(L.T("waves.notFound"));
-        var map = plan.Inventory.Objects.ToDictionary(o => o.Id);
-        var lines = new List<string>(); var undo = new List<string>(); var computers = new List<string>();
-        foreach (var m in wave.Members) {
-            var gsid = map[m.GroupId].Sid!;
-            foreach (var cid in m.ComputerIds) {
-                var csid = map[cid].Sid!; computers.Add(cid);
-                lines.Add($"if(-not (Get-ADGroupMember -Identity '{gsid}' | Where-Object {{ $_.SID.Value -eq '{csid}' }})){{Add-ADGroupMember -Identity '{gsid}' -Members '{csid}'; $changed++}}");
-                undo.Add($"if(Get-ADGroupMember -Identity '{gsid}' | Where-Object {{ $_.SID.Value -eq '{csid}' }}){{Remove-ADGroupMember -Identity '{gsid}' -Members '{csid}' -Confirm:$false; $changed++}}");
-            }
-        }
-        var head = MembershipPreamble.Replace("__PINPDC__", PinPdc).Replace("__DOMAINSID__", plan.Inventory.DomainSid).Replace("__MARKER__", $"IpsecStudio plan {plan.Id} v{plan.Version} wave {wave.Id}");
-        // Hosts renew their machine ticket from any DC: wait until every reachable DC shows the membership change (SIDs only).
-        string Expect(bool present) => "$expect=@(" + string.Join(",", wave.Members.SelectMany(m => m.ComputerIds.Select(c => $"@{{g='{map[m.GroupId].Sid}';c='{map[c].Sid}';present=${(present ? "true" : "false")}}}"))) + ")";
-        var apply = head + NL + string.Join(NL, lines) + NL + Expect(true) + NL + WaitMembership.Replace("__REPLWAIT__", plan.Input.Settings.ReplicationWaitSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture)) + NL + "@{marker=$marker;changed=$changed;replication=$repl}|ConvertTo-Json -Compress";
-        var rollback = head + NL + string.Join(NL, undo) + NL + Expect(false) + NL + WaitMembership.Replace("__REPLWAIT__", plan.Input.Settings.ReplicationWaitSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture)) + NL + "@{marker=$marker;changed=$changed;replication=$repl}|ConvertTo-Json -Compress";
-        var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(apply + "\n--\n" + rollback))).ToLowerInvariant();
-        return new(wave.Id, wave.Name, computers.Distinct().ToArray(), apply, rollback, hash);
+    public static WaveCompilation CompileWave(SavedPlan plan, string waveId, string? journalPath = null) => WaveScripts.Compile(plan, waveId, journalPath);
+    public static string ReplicationCheck(SavedPlan plan) {
+        var c=Compile(plan);
+        var data=JsonSerializer.Serialize(new {domain=c.Domain,domainSid=c.DomainSid,marker=c.Marker,linkTarget=plan.Input.Settings.LinkTarget,replicationWaitSeconds=plan.Input.Settings.ReplicationWaitSeconds,gpos=c.Gpos.Select(g=>new {name=g.Name})});
+        return Preamble.Replace("__PINPDC__",PinPdc).Replace("__SPEC__",data) + "\n@{replication=(Wait-StudioReplication -Present $true)} | ConvertTo-Json -Compress -Depth 4";
     }
     // New security groups, created before they can be referenced (they need a SID in the inventory).
     public static GroupsCompilation CompileGroups(SavedPlan plan) {
@@ -100,12 +87,24 @@ public static partial class Compiler {
         if (plan.Input.NewGroups.Length == 0) throw new ValidationException(L.T("deploy.noGroups"));
         var container = plan.Input.Settings.GroupContainer ?? "CN=Users," + plan.Inventory.DomainDn;
         if (!PlanRules.ValidContainerDn(container)) throw new ValidationException(L.T("groups.container"));
-        var lines = plan.Input.NewGroups.Select(g => $"if(-not (Get-ADGroup -Filter \"Name -eq '{g.Name}'\")){{New-ADGroup -Name '{g.Name}' -GroupScope Global -GroupCategory Security -Path '{container}' -Description '{g.Description}'; $changed++}}");
+        var data = JsonSerializer.Serialize(new { container, groups = plan.Input.NewGroups }, new JsonSerializerOptions(JsonSerializerDefaults.Web));
         var head = MembershipPreamble.Replace("__PINPDC__", PinPdc).Replace("__DOMAINSID__", plan.Inventory.DomainSid).Replace("__MARKER__", $"IpsecStudio plan {plan.Id} v{plan.Version} groups");
-        var apply = head + NL + string.Join(NL, lines) + NL + "@{marker=$marker;changed=$changed}|ConvertTo-Json -Compress";
+        var apply = head + NL + GroupsTemplate.Replace("__GROUPDATA__", data);
         var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(apply))).ToLowerInvariant();
         return new(plan.Input.NewGroups.Select(g => g.Name).ToArray(), container, apply, hash);
     }
+    const string GroupsTemplate = """
+$spec=ConvertFrom-Json @'
+__GROUPDATA__
+'@
+foreach($g in @($spec.groups)){
+  if(-not (Get-ADGroup -Filter "Name -eq '$($g.name)'")){
+    New-ADGroup -Name $g.name -GroupScope Global -GroupCategory Security -Path $spec.container -Description $g.description
+    $changed++
+  }
+}
+@{marker=$marker;changed=$changed}|ConvertTo-Json -Compress
+""";
     // With several DCs every write and the reads that follow it must hit the same DC: New-GPO writes on the PDC emulator, so the
     // AD and GroupPolicy cmdlets and the AD drive used for ACLs are pinned to it (lab, CV4.DS5: dc2 had not replicated the new GPO).
     public const string PinPdc = """
@@ -113,21 +112,31 @@ $pdc=$domain.PDCEmulator
 $PSDefaultParameterValues['*-AD*:Server']=$pdc
 $PSDefaultParameterValues['*-GP*:Server']=$pdc
 if(-not (Get-PSDrive IpsecPdc -ErrorAction SilentlyContinue)){ New-PSDrive -Name IpsecPdc -PSProvider ActiveDirectory -Root '//RootDSE/' -Server $pdc | Out-Null }
+function Get-StudioGpoOrNull([string]$name,[string]$server=$pdc){
+  try {
+    $g=Get-GPO -Name $name -Server $server -ErrorAction Stop
+    if(-not $g){throw "Incomplete GPO lookup: $name"}
+    return $g
+  }catch{
+    if(($_.FullyQualifiedErrorId -split ',')[0] -eq 'GpoWithNameNotFound' -and $_.CategoryInfo.Category -eq 'ObjectNotFound'){ return $null }
+    throw
+  }
+}
 """;
-    const string WaitMembership = """
+    internal const string WaitMembership = """
 $deadline=(Get-Date).AddSeconds(__REPLWAIT__); $repl=[ordered]@{}
 foreach($dc in @(Get-ADDomainController -Filter * | ForEach-Object { $_.HostName })){
   if(-not (Test-NetConnection $dc -Port 389 -InformationLevel Quiet -WarningAction SilentlyContinue)){ $repl[$dc]='unreachable'; continue }
   $ok=$false
-  while(-not $ok -and (Get-Date) -lt $deadline){
+  do {
     $ok=$true
-    foreach($e in $expect){ $m=[bool](Get-ADGroupMember -Identity $e.g -Server $dc | Where-Object { $_.SID.Value -eq $e.c }); if($m -ne $e.present){ $ok=$false } }
-    if(-not $ok){ Start-Sleep -Seconds 5 }
-  }
+    foreach($e in $expect){ $m=Test-StudioMembership $e.g $e.c $dc; if($m -ne $e.present){ $ok=$false } }
+    if(-not $ok -and (Get-Date) -lt $deadline){ Start-Sleep -Seconds 5 }
+  }while(-not $ok -and (Get-Date) -lt $deadline)
   $repl[$dc]=if($ok){'ok'}else{'timeout'}
 }
 """;
-    const string MembershipPreamble = """
+    internal const string MembershipPreamble = """
 $ErrorActionPreference='Stop'
 $ProgressPreference='SilentlyContinue'
 [Console]::OutputEncoding=[Text.UTF8Encoding]::new($false)
@@ -137,6 +146,15 @@ if($domain.DomainSID.Value -ne '__DOMAINSID__'){throw "Wrong domain: $($domain.D
 __PINPDC__
 $marker='__MARKER__'
 $changed=0
+# Primary-group membership may not be listed in the group's member attribute. Never claim ownership of it.
+function Test-StudioMembership([string]$g,[string]$c,[string]$server=$pdc){
+  $computer=Get-ADComputer -Identity $c -Server $server -Properties MemberOf,PrimaryGroupID
+  $rootSid=$computer.SID.Value -replace '-\d+$',''
+  if($g -eq "$rootSid-$($computer.PrimaryGroupID)"){ return $true }
+  # Read the computer's direct links, not every member of a potentially large group.
+  $groupDn=(Get-ADGroup -Identity $g -Server $server).DistinguishedName
+  return ($groupDn -in @($computer.MemberOf))
+}
 """;
     const string Preamble = """
 $ErrorActionPreference='Stop'
@@ -151,7 +169,7 @@ $domain=Get-ADDomain
 if($domain.DNSRoot -ne $spec.domain -or $domain.DomainSID.Value -ne $spec.domainSid){throw "Wrong domain: $($domain.DNSRoot)"}
 __PINPDC__
 $target=if($spec.linkTarget -eq 'domain'){$domain.DistinguishedName}else{$spec.linkTarget}
-function Get-StudioGpo([string]$name){$g=Get-GPO -Name $name -ErrorAction SilentlyContinue;if($g -and $g.Description -ne $spec.marker){throw "GPO $name exists but belongs to another revision: $($g.Description)"};return $g}
+function Get-StudioGpo([string]$name){$g=Get-StudioGpoOrNull $name;if($g -and $g.Description -ne $spec.marker){throw "GPO $name exists but belongs to another revision: $($g.Description)"};return $g}
 # Hosts refresh from any DC: wait (max 180 s) until every reachable DC shows the Studio GPOs present with AD = SYSVOL version
 # (after apply) or absent (after rollback). Unreachable DCs are reported, not waited for.
 function Wait-StudioReplication([bool]$Present){
@@ -159,14 +177,14 @@ function Wait-StudioReplication([bool]$Present){
   foreach($dc in @(Get-ADDomainController -Filter * | ForEach-Object { $_.HostName })){
     if(-not (Test-NetConnection $dc -Port 389 -InformationLevel Quiet -WarningAction SilentlyContinue)){ $state[$dc]='unreachable'; continue }
     $ok=$false
-    while(-not $ok -and (Get-Date) -lt $deadline){
+    do {
       $ok=$true
       foreach($n in @($spec.gpos.name)){
-        $g=Get-GPO -Name $n -Server $dc -ErrorAction SilentlyContinue
+        $g=Get-StudioGpoOrNull $n $dc
         if($Present){ if(-not ($g -and $g.Description -eq $spec.marker -and $g.Computer.DSVersion -eq $g.Computer.SysvolVersion)){ $ok=$false } } elseif($g){ $ok=$false }
       }
-      if(-not $ok){ Start-Sleep -Seconds 5 }
-    }
+      if(-not $ok -and (Get-Date) -lt $deadline){ Start-Sleep -Seconds 5 }
+    }while(-not $ok -and (Get-Date) -lt $deadline)
     $state[$dc]=if($ok){'ok'}else{'timeout'}
   }
   return $state
@@ -181,15 +199,17 @@ function Deny-Apply([guid]$id,[string]$sid){
   $acl.AddAccessRule($rule)
   Set-Acl -Path $path -AclObject $acl
 }
-foreach($g in $spec.gpos){if(Get-GPO -Name $g.name -ErrorAction SilentlyContinue){throw "GPO already exists: $($g.name). Roll back first."}}
+foreach($g in $spec.gpos){if(Get-StudioGpoOrNull $g.name){throw "GPO already exists: $($g.name). Roll back first."}}
 $created=@()
 try{
   foreach($g in $spec.gpos){
     $gpo=New-GPO -Name $g.name -Comment $spec.marker
     $created+=$g.name
     $store=$spec.domain+'\'+$g.name
-    Set-GPPermission -Guid $gpo.Id -TargetName 'Authenticated Users' -TargetType Group -PermissionLevel GpoRead -Replace | Out-Null
-    Set-GPPermission -Guid $gpo.Id -TargetName $g.applyGroup -TargetType Group -PermissionLevel GpoApply | Out-Null
+    $authenticatedUsers=([Security.Principal.SecurityIdentifier]'S-1-5-11').Translate([Security.Principal.NTAccount]).Value
+    $applyGroupName=([Security.Principal.SecurityIdentifier]$g.applyGroupSid).Translate([Security.Principal.NTAccount]).Value
+    Set-GPPermission -Guid $gpo.Id -TargetName $authenticatedUsers -TargetType Group -PermissionLevel GpoRead -Replace | Out-Null
+    Set-GPPermission -Guid $gpo.Id -TargetName $applyGroupName -TargetType Group -PermissionLevel GpoApply | Out-Null
     foreach($sid in @($g.denyGroupSids)){Deny-Apply $gpo.Id $sid}
     # IPsec settings go into the GPO through a session opened on the PDC, where New-GPO created it (no replication wait).
     $gs=Open-NetGPO -PolicyStore $store -DomainController $pdc
@@ -213,7 +233,7 @@ try{
   $replication=Wait-StudioReplication -Present $true
   @{marker=$spec.marker;target=$target;gpos=@($spec.gpos | ForEach-Object {$x=Get-GPO -Name $_.name;@{name=$_.name;guid=$x.Id.ToString();profile=$_.profile}});links=$links;replication=$replication} | ConvertTo-Json -Compress -Depth 6
 }catch{
-  foreach($name in $created){$g=Get-GPO -Name $name -ErrorAction SilentlyContinue;if($g -and $g.Description -eq $spec.marker){Remove-GPLink -Name $name -Target $target -ErrorAction SilentlyContinue | Out-Null;Remove-GPO -Name $name | Out-Null}}
+  foreach($name in $created){$g=Get-StudioGpoOrNull $name;if($g -and $g.Description -eq $spec.marker){Remove-GPLink -Name $name -Target $target -ErrorAction SilentlyContinue | Out-Null;Remove-GPO -Name $name | Out-Null}}
   throw
 }
 """;

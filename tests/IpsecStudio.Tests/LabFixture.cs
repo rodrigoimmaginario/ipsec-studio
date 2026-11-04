@@ -13,6 +13,7 @@ public sealed class LabFixture {
     DirectoryObject Group(string name, params DirectoryObject[] members) => new() { Id = Id(), Name = name, Kind = "group", Sid = Sid(), MemberIds = members.Select(m => m.Id).ToArray() };
 
     public readonly DirectoryObject Dc1, App1, Db1, Fs1, ClientNo, Admin1, Wsus, Legacy;
+    public readonly DirectoryObject PilotOu = new(){Id=Id(),Name="IpsecProof",Kind="ou",Dn="OU=IpsecProof,DC=lab,DC=ipsec,DC=test",BlocksInheritance=false};
     public readonly DirectoryObject DomainComputers, AdminClients, SqlServers, SqlClients, FileServers, FileClients, Boundary, NoPolicy, Exclusion;
     public readonly InventorySnapshot Snapshot;
     public readonly ExternalHost Ext1;
@@ -28,7 +29,7 @@ public sealed class LabFixture {
         FileServers = Group("IPSEC-File-Servers", Fs1); FileClients = new() { Id = Id(), Name = "IPSEC-File-Clients", Kind = "group", Sid = Sid(), MemberIds = [App1.Id, AdminClients.Id] };
         Boundary = Group("IPSEC-Boundary", Wsus); NoPolicy = Group("IPSEC-NoPolicy", Legacy); Exclusion = Group("IPSEC-Exclusion");
         Snapshot = new() { Id = Id(), CapturedAt = DateTimeOffset.UtcNow, Domain = "lab.ipsec.test", DomainSid = DomainSid, DomainDn = "DC=lab,DC=ipsec,DC=test", Identity = "test",
-            Objects = [Dc1, App1, Db1, Fs1, ClientNo, Admin1, Wsus, Legacy, DomainComputers, AdminClients, SqlServers, SqlClients, FileServers, FileClients, Boundary, NoPolicy, Exclusion] };
+            Objects = [PilotOu, Dc1, App1, Db1, Fs1, ClientNo, Admin1, Wsus, Legacy, DomainComputers, AdminClients, SqlServers, SqlClients, FileServers, FileClients, Boundary, NoPolicy, Exclusion] };
         Ext1 = new() { Id = Id(), Name = "ext1", Address = "10.74.1.60" };
         Sql = new() { Id = Id(), Name = "Banco de dados", ProtectedGroupId = SqlServers.Id, AccessGroupId = SqlClients.Id, Encryption = true };
         Files = new() { Id = Id(), Name = "Arquivos", ProtectedGroupId = FileServers.Id, AccessGroupId = FileClients.Id, Encryption = false };

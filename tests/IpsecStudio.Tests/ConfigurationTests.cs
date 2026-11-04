@@ -12,7 +12,9 @@ public class ConfigurationTests {
         Assert.True(doc.RootElement.TryGetProperty("Directory", out _));
         Assert.True(doc.RootElement.TryGetProperty("Storage", out var storage));
         Assert.Contains('\\', storage.GetProperty("Root").GetString()!);
-        Assert.True(doc.RootElement.TryGetProperty("Deployment", out _));
+        Assert.True(doc.RootElement.TryGetProperty("Deployment", out var deployment));
+        Assert.False(deployment.GetProperty("Enabled").GetBoolean());
+        Assert.Equal("",doc.RootElement.GetProperty("Directory").GetProperty("ExpectedDomain").GetString());
         Assert.Equal(5090, doc.RootElement.GetProperty("Port").GetInt32());
     }
 }

@@ -4,32 +4,43 @@
 
 ## Identidade e autoridade
 
-- O Studio não tem usuários, senhas ou tokens próprios. Toda ação usa a **identidade Windows do processo** — a do administrador que o executou. É o mesmo modelo de confiança do GPMC.
-- O serviço escuta apenas em `127.0.0.1`; requisições com outro `Host`, outra origem ou sem o token da página são recusadas. Isso protege contra páginas de terceiros no mesmo navegador, não transforma o Studio num serviço de rede. **Não publique a porta.**
-- Uma instância com `Deployment:Enabled=false` só lê o AD e planeja; útil para analistas sem permissão de escrita.
+- Toda ação usa a **identidade Windows do processo**, como o GPMC. Não há conta de serviço nem senha própria do Studio.
+- O serviço escuta em `127.0.0.1`. Windows Authentication (Negotiate) e comparação do SID exigem o mesmo operador que iniciou o processo, inclusive para ler a API. O navegador pode pedir essa conta Windows.
+- O token da página, a validação de Host/origem e a política de conteúdo protegem a fronteira do navegador; não substituem a autenticação Windows. **Não publique a porta.** Use uma instância em estação administrativa controlada, não um serviço compartilhado.
+- O pacote inicia com `Deployment:Enabled=false`: ler/planejar não habilita alterações no domínio. Ative conscientemente no arquivo de configuração e reinicie.
+- A pasta de armazenamento tem permissões para operador, SYSTEM e administradores locais; esses administradores continuam na fronteira de confiança. Proteja também cópias e backups.
 
-## O que o Studio grava
+## O que o Studio altera
 
-- GPOs com nome `IpsecStudio-*` e descrição contendo o identificador e a versão do plano, vinculadas no destino escolhido. Nenhuma GPO existente é alterada; a reversão remove apenas GPOs com a marca da versão.
-- Nenhuma regra de firewall, nenhuma alteração em grupos do AD, nenhum agente nos hosts.
-- Nos hosts, via WinRM e só a pedido: `klist -li 0x3e7 purge`, `gpupdate`, remoção de SAs, leitura de regras ativas, conexões TCP de sonda.
+- GPOs `IpsecStudio-*` com identificador e revisão na descrição; vínculos no destino escolhido. A reversão exige a marca da revisão.
+- Grupos novos declarados e associações de computadores em ondas, somente a pedido e com aprovação. Não cria regras de firewall nem instala agente permanente.
+- Nos hosts, via WinRM: tarefa SYSTEM temporária para atualizar GPOs, purge de tickets de máquina e limpeza de SAs; leituras de regras, conexões de sonda e captura opcional, apagada ao final quando o host permanece acessível.
+- Purge e limpeza de SAs podem afetar serviços e sessões existentes. A sonda não é observação passiva. Evite concorrência com outras intervenções; tenha console independente.
 
-## Como o script é construído
+## Construção e recuperação dos roteiros
 
-O compilador é código constante mais **um único literal JSON** com valores tipados e validados (SIDs no padrão de domínio, nomes de grupo com padrão restrito, IPv4/CIDR, catálogo fechado de suítes). Nenhum texto livre chega ao PowerShell. O hash SHA-256 do roteiro é exibido antes da execução e conferido no momento de aplicar/reverter; um plano reaberto com outra versão é recusado.
+Dados são serializados em JSON antes de entrar no PowerShell, inclusive contêineres de grupos. Aplicação/reversão conferem o hash da prévia. Novas aplicações preservam o artefato compilado; revisões de edição e de implantação são distintas. Diários de ondas persistem a propriedade das associações; estados ambíguos não são automaticamente desfeitos.
 
-## O que o Studio prova e o que não prova
+Aprovação é uma nota do operador, não um sistema de aprovação por segunda pessoa. Registros locais são evidência operacional, não um log inviolável contra administradores da máquina. Veja [recuperação](recuperacao.md), inclusive para instalações antigas sem diários/artefatos.
 
-| Evidência | Fonte | Limite |
+## O que cada evidência significa
+
+| Evidência | O que permite afirmar | Limite |
 |---|---|---|
-| Plano salvo | disco | intenção, não política |
-| GPO criada e vinculada | saída do script, GUIDs | não significa aplicada nos hosts |
-| Política efetiva | regras ativas com status, GPO de origem, lista de autorização | um host inacessível fica sem verificação |
-| Tráfego | conexão TCP + SA de quick mode no iniciador | não é captura de pacotes; a cifra observada é a negociada na SA |
+| Plano e matriz | previsão conforme snapshot e escopo modelado | não é descoberta de todos os fluxos nem garantia de aplicação da GPO |
+| GPO no AD | configuração criada/vinculada e comparada | não prova que todos os hosts/DCs já a receberam |
+| Política efetiva | regras, filtros, modos, autorização, criptografia, origem e status correspondem ao esperado | um host inacessível ou leitura incompleta continua não verificado |
+| TCP + SA | conectividade e proteção negociada na sonda | TCP sem conexão não identifica sozinho a causa; SA pode ser reutilizada |
+| Captura ESP | pacotes protegidos observados no par | ESP também pode usar cifra nula; distinguir cifra de integridade exige a SA |
 
-## Dependências operacionais
+## Limites operacionais
 
-- **Controladores de domínio** devem ficar isentos (padrão): Kerberos, DNS e Group Policy acontecem antes de qualquer SA.
-- **Sub-redes seguras** limitam onde a negociação é exigida; acesso administrativo vindo de fora delas (por exemplo um bastion) continua em claro.
-- **Mudanças de grupo** só valem após renovar o ticket de máquina; SAs existentes continuam válidas até expirar ou serem removidas.
-- A estação de administração precisa estar autorizada pelos servidores restritos (grupo de acesso ou gestão) para verificá-los por WinRM.
+- Domain Computers na raiz não é piloto limitado: a GPO fica elegível antes das ondas. Comece por OU/grupo dedicado.
+- A previsão presume negociação nova. SAs são bidirecionais: uma SA aberta pela gestão pode permitir o retorno mesmo quando a lista unilateral negaria uma negociação nova. Essa combinação aparece como não determinada, não libera expansão e não é corrigida ampliando permissões. Não use IPsec no lugar do firewall para prometer bloqueio por conexão.
+- A matriz usa até 30 máquinas por consulta; o inventário não tem esse limite. A sondagem completa continua cara em redes grandes.
+- Endereços e sub-redes configuráveis são IPv4; regra com `Any` não equivale a listar somente prefixos IPv4. Tráfego fora do escopo configurado não está coberto pela promessa de isolamento.
+- As GPOs do Studio negam Aplicar GPO aos grupos Domain Controllers e Read-only Domain Controllers, mesmo com associação acidental a um perfil. DCs e endereços isentos, ICMP e fronteira têm exceções deliberadas. Quarentena não substitui contenção de EDR/firewall nem bloqueia todo acesso externo.
+- Ticket mais novo que a mudança de grupo é **indício**, não comprovação dos grupos no ticket nem da replicação no DC emissor. A política efetiva e os testes continuam necessários.
+- Para os próprios vínculos não impostos, o inventário lê bloqueio de herança nas OUs: bloqueio abaixo do vínculo exclui o host; informação ausente torna a previsão indeterminada. Inventários antigos precisam ser relidos antes de novas ondas; a recuperação de GPO continua disponível.
+- Vários sites AD, políticas IPsec legadas, alcance de outras GPOs (herança/vínculos impostos/filtragem adicional), SIDHistory e Windows localizado exigem validação específica. O pacote não tem Authenticode.
+- Uma alteração de compilador/simulador/implantação só é homologada após nova regressão no AD. Testes locais e cobertura C# não comprovam sozinhos os comandos PowerShell.

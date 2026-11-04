@@ -22,9 +22,9 @@ Maintainer / mantenedor: **Rodrigo Immaginario** ([@rodrigoimmaginario](https://
 
 ## Development routine / Rotina de desenvolvimento
 
-1. **TDD**: write the failing test first (`tests/IpsecStudio.Tests/Program.cs` for rules, simulator, compiler and persistence; `tests/browser/prototype-render.mjs` for the UI), then the code, then refactor.
+1. **TDD**: write the failing test first (`tests/IpsecStudio.Tests/*.cs` for rules, simulator, compiler and persistence; `tests/browser/prototype-render.mjs` for the UI), then the code, then refactor.
 2. `scripts/run-checks.ps1` must be green before any push (`scripts/install-hooks.ps1` enforces it with a pre-push hook). Guide: `docs/pt-br/tdd.md` / `docs/en/tdd.md`.
-3. Changes to `Simulator.cs`, `Compiler.cs` or `Deployment.cs` require a lab cycle with the *expected × observed* probe matching 100 %; record the result in the pull request.
+3. Changes to `Simulator.cs`, `Compiler.cs` or `Deployment.cs` require a real AD lab cycle; record *expected × observed*, failures and resumed runs in the pull request. Expansion requires complete, conclusive matching evidence. Intentionally indeterminate counterexamples must prove that expansion is refused, never be counted as green matches. C# coverage or fake AD alone is not cmdlet validation.
 4. No secrets, keys, SAS tokens or credential files in the repository (`.gitignore`). No real third-party environment data.
 
 ## License / Licença

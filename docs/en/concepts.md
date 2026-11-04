@@ -15,7 +15,7 @@ Domain isolation: only trusted computers (domain members authenticated with mach
 | No IPsec | none (Deny Apply everywhere) | — | — |
 | Boundary | `IpsecStudio-Boundary` → boundary group | *Request/Request* | none |
 | Quarantine | `IpsecStudio-Quarantine` → exclusion group | Inbound *Require*, outbound *Request* | Allow management only |
-| Management (optional) | `IpsecStudio-Management` → management group | like the base | Allow base group (no Deny) |
+| Management (optional) | `IpsecStudio-Management` → management group | like the base | Allow base and exclusion (no Deny; permits remediation with a custom base) |
 
 Every GPO also contains: an exemption rule (`InboundSecurity None / OutboundSecurity None`) for domain controllers and declared addresses; a main mode set (default AES-256/SHA-256/DH14); a quick mode set (ESP/null + ESP/AES-256; AES only for encrypted profiles); machine Kerberos authentication; ICMP exemption.
 
@@ -37,6 +37,8 @@ Relevant observations from the lab:
 - SAs are **bidirectional** and reused; that is why quarantine has its own GPO and the *Refresh* step clears SAs and tickets after group changes.
 - Group changes take effect only after the machine ticket is renewed (`klist -li 0x3e7 purge`) or a reboot; the Studio does this in the *Refresh* step.
 
+OU reach is estimated from the inventory tree; blocked inheritance, enforced links and additional filtering are not a complete Group Policy model. Host verification remains mandatory.
+
 ## Waves
 
-Wave deployment does not duplicate GPOs: there is always one GPO per profile. A wave controls **who joins each profile group**, as in the original design ("drag and drop" the machine into the group). The Studio writes the membership (by SID, never by name), renews the identity of the wave's hosts and compares the probe with that wave's simulation before allowing the next one.
+Wave deployment does not duplicate GPOs: there is always one GPO per profile. A wave controls **who joins each profile group**, as in the original design ("drag and drop" the machine into the group). The Studio writes memberships by SID, records which members it actually added, renews wave hosts' identity and requires matching policy and complete evidence before allowing the next wave. Waves do not limit eligibility of existing group members: Domain Computers at the root already includes the entire domain. Undo waves in reverse order; rollback does not remove memberships predating the Studio.
