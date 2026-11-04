@@ -20,7 +20,7 @@ builder.Services.AddSingleton(new PlanRepository(builder.Configuration["Storage:
 builder.Services.AddSingleton<IScriptRunner, PowerShellRunner>();
 builder.Services.AddSingleton<Deployment>();
 var app = builder.Build();
-const string Version = "0.5.0";
+const string Version = "0.5.1";
 var token = Convert.ToHexString(RandomNumberGenerator.GetBytes(32));
 var identity = WindowsIdentity.GetCurrent().Name;
 var operatorSid = WindowsIdentity.GetCurrent().User!.Value;

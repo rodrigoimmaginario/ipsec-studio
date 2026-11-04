@@ -39,7 +39,7 @@ Cada computador gerenciado e elegível recebe **uma GPO de perfil**; fora do alc
 
 ## Início rápido
 
-> **v0.5.0 — confiabilidade:** recuperação por revisão, diário de associações próprias, verificação completa e primeiro uso somente leitura. [Notas e cuidados de atualização](docs/release-notes/0.5.0.md). Validado em laboratório; ainda não recomendamos produção sem piloto na sua rede.
+> **v0.5.1 — Malha compacta:** identidade visual no aplicativo, site, favicons e executável Windows. Mantém a recuperação por revisão, verificação e primeiro uso somente leitura da linha 0.5. [Notas e cuidados de atualização](docs/release-notes/0.5.1.md). Validado em laboratório; ainda não recomendamos produção sem piloto na sua rede.
 
 Baixe o zip da [última versão](https://github.com/rodrigoimmaginario/ipsec-studio/releases/latest), confira o SHA-256 com o arquivo `.sha256` publicado junto e execute `IpsecStudio.exe`. Para gerar a partir do código:
 

@@ -27,6 +27,13 @@ Maintainer / mantenedor: **Rodrigo Immaginario** ([@rodrigoimmaginario](https://
 3. Changes to `Simulator.cs`, `Compiler.cs` or `Deployment.cs` require a real AD lab cycle; record *expected × observed*, failures and resumed runs in the pull request. Expansion requires complete, conclusive matching evidence. Intentionally indeterminate counterexamples must prove that expansion is refused, never be counted as green matches. C# coverage or fake AD alone is not cmdlet validation.
 4. No secrets, keys, SAS tokens or credential files in the repository (`.gitignore`). No real third-party environment data.
 
+## Brand assets / Identidade visual
+
+- Canonical mark: `app/IpsecStudio/wwwroot/brand.svg` (approved compact mesh). `node scripts/generate-branding.mjs` derives the inverse mark, app/site favicons and the Windows ICO; requires Chrome/Chromium, selectable with `BROWSER_EXE`. It uses an isolated temporary profile and no remote resources.
+- Fonte da marca: `app/IpsecStudio/wwwroot/brand.svg` (Malha compacta aprovada). O comando acima gera as versões derivadas, sem acesso a contas ou recursos remotos. Não redesenhar variantes independentemente.
+- `node tests/branding/branding-smoke.mjs` checks consistency and ICO frames. On Windows, `scripts/run-checks.ps1 -Publish` also compares the published EXE's icon with the ICO and checks the served SVG assets.
+- O gate Windows com `-Publish` confere o ícone incorporado ao EXE e os SVGs servidos. Alterações de marca não justificam mudar políticas nem religar o laboratório AD.
+
 ## License / Licença
 
 MIT. Contributions are accepted under the same license; the maintainer is not obliged to accept pull requests.

@@ -25,9 +25,15 @@ try {
     $status=$response.Content.ReadAsStringAsync().Result | ConvertFrom-Json
     if($status.deploymentEnabled){ throw 'Smoke must be read-only.' }
     if($RequireStatic){
-        foreach($path in @('/','/app.js','/i18n.js','/style.css','/app.css')){
+        foreach($path in @('/','/app.js','/i18n.js','/style.css','/app.css','/brand.svg','/brand-dark.svg','/favicon.svg')){
             $asset=$client.GetAsync($url+$path).GetAwaiter().GetResult()
             if([int]$asset.StatusCode -ne 200){throw "Published asset failed: $path"}
+            if($path.EndsWith('.svg')){
+                if($asset.Content.Headers.ContentType.MediaType -ne 'image/svg+xml'){throw "SVG content type failed: $path"}
+                $source=Join-Path $PSScriptRoot ('..\..\app\IpsecStudio\wwwroot\'+$path.TrimStart('/'))
+                $expected=[IO.File]::ReadAllText((Resolve-Path $source).Path).Replace("`r`n","`n")
+                if($asset.Content.ReadAsStringAsync().Result.Replace("`r`n","`n") -cne $expected){throw "Published SVG differs from source: $path"}
+            }
         }
     }
     $body=[Net.Http.StringContent]::new('{}',[Text.Encoding]::UTF8,'application/json')

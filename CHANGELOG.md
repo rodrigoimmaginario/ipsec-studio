@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.5.1 — 2026-11-04
+
+- Apply the approved compact-mesh identity to the application sidebar, site header, browser favicons and Windows executable icon. Include small/high-DPI ICO frames and branding/native-resource checks; no policy behavior changes.
+- Aplicar a identidade Malha compacta aprovada à barra lateral do aplicativo, cabeçalho do site, favicons e ícone do executável Windows. Inclui resoluções pequenas/alta densidade e testes de marca/recurso nativo; sem mudança no comportamento das políticas.
+
 ## 0.5.0 — 2026-11-03
 
 Reliability: revision-based recovery, owned memberships, scoped predictions, complete evidence and safer first use.

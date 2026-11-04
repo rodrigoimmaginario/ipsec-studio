@@ -34,7 +34,7 @@ main > section { max-width: 1240px; margin: 0 auto; padding: 90px 28px; }
 .top.lined { border-bottom-color: var(--line); } .top.away { transform: translateY(-100%); }
 .top-in { max-width: 1240px; margin: 0 auto; display: flex; align-items: center; gap: 24px; padding: 12px 28px; }
 .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; text-decoration: none; white-space: nowrap; }
-.logo { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 8px; border: 1.5px solid var(--teal); color: var(--teal); font-size: .75rem; }
+.logo { display: block; width: 32px; height: 32px; flex-shrink: 0; }
 .links { display: flex; gap: 2px; }
 .links a { text-decoration: none; color: var(--muted); padding: 6px 11px; border-radius: 8px; font-size: .93rem; white-space: nowrap; }
 .links a:hover { color: var(--ink); background: #eaf0f4; } .links a.on { color: var(--teal); background: var(--teal-soft); }

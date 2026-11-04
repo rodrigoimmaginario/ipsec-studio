@@ -6,8 +6,9 @@
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     <RuntimeFrameworkVersion>10.0.14</RuntimeFrameworkVersion>
     <SelfContained>true</SelfContained>
-    <Version>0.5.0</Version>
+    <Version>0.5.1</Version>
     <AssemblyName>IpsecStudio</AssemblyName>
+    <ApplicationIcon>Assets\IpsecStudio.ico</ApplicationIcon>
   </PropertyGroup>
   <ItemGroup><PackageReference Include="Microsoft.AspNetCore.Authentication.Negotiate" Version="10.0.14" /></ItemGroup>
   <ItemGroup><Content Include="scripts\**" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" /></ItemGroup>

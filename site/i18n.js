@@ -94,7 +94,7 @@ window.SITE_I18N = {
     proof: {
       eyebrow: 'Prova',
       title: 'Testado num laboratório com Active Directory real',
-      intro: 'A v0.5.0 reúne 151 testes locais Windows e cenários em AD real com 12 máquinas. As falhas, correções e retomadas fazem parte da evidência, não são apagadas por uma rodada verde.',
+      intro: 'A linha 0.5 reúne 151 testes locais Windows e cenários em AD real com 12 máquinas. As falhas, correções e retomadas fazem parte da evidência, não são apagadas por uma rodada verde.',
       items: [
         'Ciclo de ponta a ponta: aplicar, verificar, sondar e reverter, com o resultado de cada conexão comparado ao que a simulação previu.',
         'Dois controladores de domínio, com espera pela replicação e testes com um deles desligado.',
@@ -132,7 +132,7 @@ window.SITE_I18N = {
       ],
       verify: 'Cada versão traz o arquivo .sha256. Confira o pacote antes de executar:',
       verifyCmd: 'Get-FileHash .\\ipsec-studio-*.zip -Algorithm SHA256',
-      release: 'Baixar a v0.5.0',
+      release: 'Baixar a v0.5.1',
       install: 'Guia de instalação',
       contributeTitle: 'Contribuir',
       contribute: 'Avalie em laboratório; ainda não recomendamos produção. Testes em outros ambientes, sugestões e correções são bem-vindos no GitHub.',
@@ -244,7 +244,7 @@ window.SITE_I18N = {
     proof: {
       eyebrow: 'Proof',
       title: 'Tested in a lab with a real Active Directory',
-      intro: 'Version 0.5.0 combines 151 local Windows tests and real AD scenarios with 12 machines. Failures, corrections and resumed runs remain part of the evidence; a green run does not erase them.',
+      intro: 'The 0.5 line combines 151 local Windows tests and real AD scenarios with 12 machines. Failures, corrections and resumed runs remain part of the evidence; a green run does not erase them.',
       items: [
         'End-to-end cycle: apply, verify, probe and roll back, with each connection result compared to what the simulation predicted.',
         'Two domain controllers, with waits for replication and tests with one of them shut down.',
@@ -282,7 +282,7 @@ window.SITE_I18N = {
       ],
       verify: 'Every release ships a .sha256 file. Check the package before running it:',
       verifyCmd: 'Get-FileHash .\\ipsec-studio-*.zip -Algorithm SHA256',
-      release: 'Download v0.5.0',
+      release: 'Download v0.5.1',
       install: 'Installation guide',
       contributeTitle: 'Contribute',
       contribute: 'Evaluate in a lab; production use is not recommended yet. Tests in other environments, suggestions and fixes are welcome on GitHub.',

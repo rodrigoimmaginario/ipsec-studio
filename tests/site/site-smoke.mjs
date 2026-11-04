@@ -121,7 +121,7 @@ function load({ search = '', lang = null, reducedMotion = false, storageUnavaila
   assert.match(html, /<link rel="canonical" href="https:\/\/rodrigoimmaginario\.github\.io\/ipsec-studio\/">/, 'canonical');
   for (const p of ['og:title', 'og:description', 'og:url', 'og:type']) assert.ok(html.includes(`property="${p}"`), p);
   assert.match(html, /property="og:image" content="https:\/\/rodrigoimmaginario\.github\.io\/ipsec-studio\/img\/og\.png"/, 'og:image on Pages');
-  assert.match(html, /<link rel="icon" href="img\/favicon\.svg"/, 'local favicon');
+  assert.ok(html.includes(`<link rel="icon" href="img/favicon.svg?v=${version}"`), 'versioned local favicon');
   const images = ['og.png', 'favicon.svg', ...[1, 2, 3, 4, 5].flatMap((n) => [`passo-${n}-pt.png`, `passo-${n}-en.png`])];
   for (const f of images) {
     const file = path.join(root, 'img', f);

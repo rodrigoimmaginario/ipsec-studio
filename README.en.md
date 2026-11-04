@@ -8,7 +8,7 @@
 
 IPsec Studio turns the classic *Server and Domain Isolation* model (IPsec + Group Policy + Active Directory groups) into a guided workflow: describe **five protection profiles** over AD machine groups, see **predicted policy outcomes for fresh negotiations**, with indeterminate cases explicit before touching the domain, generate the GPOs, apply them with your own administrator identity, verify the effective policy on the hosts and **compare real traffic with the simulation**. Everything happens at the network layer; no application changes and no firewall rules.
 
-![Simulation: what Windows will do with each new connection](docs/images/simulation.png)
+![Simulation: what Windows will do with each new connection](docs/images/simulation-en.png)
 
 ## The five profiles
 
@@ -29,7 +29,7 @@ Each eligible managed computer receives **one profile GPO**; out-of-scope, DC an
 3. **Simulate** — initiator × responder matrix with the predicted outcome: *clear*, *authenticated*, *encrypted* or *blocked*, with an explanation per cell.
 4. **Deploy** — compiles the PowerShell script (SHA-256 hash), applies the GPOs with the identity of whoever opened the Studio, refreshes and verifies the hosts over WinRM, probes traffic and rolls back.
 
-![Deployment panel](docs/images/deploy.png)
+![Deployment panel](docs/images/deploy-en.png)
 
 ## Requirements
 
@@ -39,7 +39,7 @@ Each eligible managed computer receives **one profile GPO**; out-of-scope, DC an
 
 ## Quick start
 
-> **v0.5.0 — reliability:** revision-based recovery, owned-membership journals, complete verification and read-only first use. [Release notes and upgrade precautions](docs/release-notes/0.5.0.md). Lab-validated; production use is not recommended without a pilot on your network.
+> **v0.5.1 — compact mesh:** visual identity in the app, site, browser favicons and Windows executable. Keeps the revision recovery, verification and read-only first use of the 0.5 line. [Release notes and upgrade precautions](docs/release-notes/0.5.1.md). Lab-validated; production use is not recommended without a pilot on your network.
 
 Download the zip from the [latest release](https://github.com/rodrigoimmaginario/ipsec-studio/releases/latest), check its SHA-256 against the `.sha256` file published next to it and run `IpsecStudio.exe`. To build from source:
 
