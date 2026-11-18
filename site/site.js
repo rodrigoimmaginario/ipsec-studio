@@ -123,7 +123,7 @@
     $('scenes').innerHTML = scenes().map((s, i) => `<article class="scene${state.scene === i ? ' on' : ''}" data-i="${i}" data-key="${s.key}"><span class="scene-n">${String(i + 1).padStart(2, '0')}</span><h3>${esc(s.title)}</h3><p>${esc(s.text)}</p></article>`).join('');
     drawDiagram();
     $('protect-featured').innerHTML = `<h3>${esc(L.protects.featured.risk)}</h3><p>${esc(L.protects.featured.how)}</p>`;
-    $('protect-items').innerHTML = L.protects.items.map((p) => `<li class="tile"><h3>${esc(p.risk)}</h3><p>${esc(p.how)}</p></li>`).join('');
+    $('protect-items').innerHTML = L.protects.items.map((p, i) => `<li class="tile"><h3>${esc(p.risk)}</h3><p>${esc(p.how)}</p>${i === 1 ? `<p class="sibling-question">${esc(L.protects.siblingQuestion)} <a class="more" href="https://www.ransomguard.com.br/" rel="noopener">${esc(L.protects.siblingLink)}</a></p>` : ''}</li>`).join('');
     $('benefit-items').innerHTML = L.benefits.items.map((b) => `<li><b>${esc(b.title)}</b><p>${esc(b.text)}</p></li>`).join('');
     $('why-items').innerHTML = L.why.items.map((w) => `<li><b>${esc(w.title)}</b><p>${esc(w.text)}</p></li>`).join('');
     $('why-art').innerHTML = whyArt();

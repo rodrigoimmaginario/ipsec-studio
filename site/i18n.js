@@ -39,6 +39,8 @@ window.SITE_I18N = {
         { risk: 'Aplicações e protocolos antigos', how: 'O IPsec protege na camada de rede, sem mudar a aplicação. Sistemas que não cifram por conta própria passam a trafegar autenticados e, onde for preciso, cifrados.' },
         { risk: 'Máquina suspeita durante um incidente', how: 'A quarentena restringe o acesso aos hosts protegidos e mantém a gestão. Exceções por endereço e destinos fora do plano continuam exigindo firewall ou EDR.' },
       ],
+      siblingQuestion: 'E se a estação comprometida for autorizada? O RansomGuard observa a atividade nos arquivos do servidor com agente e pode conter acessos suspeitos.',
+      siblingLink: 'Conheça o RansomGuard ↗',
       limits: { title: 'O que ele não resolve sozinho', text: 'O IPsec não impede o uso de uma credencial roubada numa máquina autorizada, não corrige vulnerabilidades de aplicação e não substitui firewall, EDR ou autenticação multifator. Ele fecha a rede interna para quem não deveria estar lá; o restante da defesa continua necessário.' },
     },
     benefits: {
@@ -149,7 +151,16 @@ window.SITE_I18N = {
         msServer: { title: 'Server isolation policy design', meta: 'Documentação oficial da Microsoft (em inglês)' },
       },
     },
-    footer: { free: 'Gratuito e aberto (licença MIT). Sugestões são bem-vindas.', repo: 'Código no GitHub' },
+    sibling: {
+      eyebrow: 'Projeto irmão · mesmo autor · gratuito e aberto (MIT)',
+      title: 'Duas camadas para a mesma rede',
+      intro: 'O IPsec Studio reduz quem chega ao servidor. Se uma estação autorizada for comprometida, o RansomGuard observa a atividade nos arquivos e pode conter o ataque conforme a política.',
+      network: 'Rede · IPsec Studio', networkText: 'Planeja, simula e implanta o isolamento por grupo com o IPsec do Windows.',
+      server: 'Servidor · RansomGuard', serverText: 'Observa arquivos monitorados e pode conter ataques conforme a política.',
+      limit: 'Os projetos funcionam separadamente: não há integração. O isolamento por IPsec não é instantâneo; o RansomGuard não protege servidores sem agente.',
+      cta: 'Conhecer o RansomGuard ↗',
+    },
+    footer: { free: 'Gratuito e aberto (licença MIT). Sugestões são bem-vindas.', repo: 'Código no GitHub', sibling: 'RansomGuard (projeto irmão)' },
   },
   en: {
     lang: 'en',
@@ -189,6 +200,8 @@ window.SITE_I18N = {
         { risk: 'Legacy applications and protocols', how: 'IPsec protects at the network layer, without changing the application. Systems that do not encrypt on their own get authenticated and, where needed, encrypted traffic.' },
         { risk: 'A suspicious machine during an incident', how: 'Quarantine restricts access to protected hosts while preserving management. Address exemptions and destinations outside the plan still need firewall or EDR controls.' },
       ],
+      siblingQuestion: 'What if the compromised workstation is authorized? RansomGuard watches file activity on servers with an agent and can contain suspicious access.',
+      siblingLink: 'Explore RansomGuard ↗',
       limits: { title: 'What it does not solve alone', text: 'IPsec does not stop a stolen credential used on an authorized machine, does not fix application vulnerabilities and does not replace a firewall, EDR or multi-factor authentication. It closes the internal network to those who should not be there; the rest of the defense is still needed.' },
     },
     benefits: {
@@ -299,6 +312,15 @@ window.SITE_I18N = {
         msServer: { title: 'Server isolation policy design', meta: 'Official Microsoft documentation' },
       },
     },
-    footer: { free: 'Free and open source (MIT license). Suggestions are welcome.', repo: 'Code on GitHub' },
+    sibling: {
+      eyebrow: 'Sibling project · same author · free and open source (MIT)',
+      title: 'Two layers for the same network',
+      intro: 'IPsec Studio reduces who can reach the server. If an authorized workstation is compromised, RansomGuard watches file activity and can contain the attack according to policy.',
+      network: 'Network · IPsec Studio', networkText: 'Plans, simulates and deploys group-based isolation with Windows IPsec.',
+      server: 'Server · RansomGuard', serverText: 'Watches monitored files and can contain attacks according to policy.',
+      limit: 'The projects work independently: there is no integration. IPsec isolation is not instant; RansomGuard does not protect servers without an agent.',
+      cta: 'Explore RansomGuard ↗',
+    },
+    footer: { free: 'Free and open source (MIT license). Suggestions are welcome.', repo: 'Code on GitHub', sibling: 'RansomGuard (sibling project)' },
   },
 };

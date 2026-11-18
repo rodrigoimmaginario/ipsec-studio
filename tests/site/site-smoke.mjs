@@ -21,9 +21,10 @@ assert.ok(!/web\.archive\.org/.test(html + model + i18n + site), 'no web cache l
 const PAGES = 'https://rodrigoimmaginario.github.io/ipsec-studio/';
 const version = fs.readFileSync(path.join(root, '..', 'app/IpsecStudio/IpsecStudio.csproj'), 'utf8').match(/<Version>([^<]+)<\/Version>/)[1];
 const RELEASE = `https://github.com/rodrigoimmaginario/ipsec-studio/releases/tag/v${version}`;
+const SIBLING = 'https://www.ransomguard.com.br/';
 for (const [name, text] of [['index.html', html], ['site.css', css], ['i18n.js', i18n], ['model.js', model.replace(refBlock, '')], ['site.js', site]]) {
   const urls = text.match(/https?:\/\/[^\s"'`)<]+/g) || [];
-  const foreign = urls.filter((u) => !u.startsWith('https://github.com/rodrigoimmaginario/ipsec-studio') && !u.startsWith('http://www.w3.org/2000/svg') && !(name === 'index.html' && u.startsWith(PAGES)));
+  const foreign = urls.filter((u) => !u.startsWith('https://github.com/rodrigoimmaginario/ipsec-studio') && !u.startsWith('http://www.w3.org/2000/svg') && !(name === 'index.html' && u.startsWith(PAGES)) && !(['index.html', 'site.js'].includes(name) && u === SIBLING));
   assert.deepEqual(foreign, [], `${name} must not load external resources: ${foreign.join(', ')}`);
 }
 assert.ok(!/<script[^>]+src=["']https?:/i.test(html) && !/<link(?![^>]*rel="canonical")[^>]+href=["']https?:/i.test(html), 'no external scripts or styles');
@@ -44,6 +45,12 @@ function element(id) {
 function load({ search = '', lang = null, reducedMotion = false, storageUnavailable = false } = {}) {
   const els = {};
   for (const m of html.matchAll(/<[^>]*\sid="([^"]+)"[^>]*>/g)) { els[m[1]] = element(m[1]); els[m[1]].hidden = /\shidden[\s>]/.test(m[0]); }
+  const translated = [...html.matchAll(/<[^>]*data-i18n="([^"]+)"[^>]*>/g)].map((m) => {
+    const id = m[0].match(/\bid="([^"]+)"/)?.[1];
+    const el = id ? els[id] : element('i18n');
+    el.setAttribute('data-i18n', m[1]);
+    return el;
+  });
   const store = new Map(lang ? [['ipsec-site-lang', lang]] : []);
   const timers = [];
   const ctx = {
@@ -53,7 +60,7 @@ function load({ search = '', lang = null, reducedMotion = false, storageUnavaila
     matchMedia: (q) => ({ matches: q.includes('reduce') ? reducedMotion : false, addEventListener() {} }),
     setInterval: (fn, ms) => { timers.push({ fn, ms }); return timers.length; }, clearInterval() {},
     addEventListener() {}, scrollTo() {}, scrollY: 0, innerHeight: 900,
-    document: { getElementById: (id) => els[id] || null, documentElement: element('html'), querySelectorAll: () => [] },
+    document: { getElementById: (id) => els[id] || null, documentElement: element('html'), querySelectorAll: (sel) => sel === '[data-i18n]' ? translated : [] },
   };
   ctx.window = ctx;
   vm.createContext(ctx);
@@ -99,6 +106,8 @@ function load({ search = '', lang = null, reducedMotion = false, storageUnavaila
     assert.equal(lang.proof.stats.length, 4, 'four proof numbers');
     assert.ok(lang.proof.items.length >= 4 && lang.proof.limits.items.length >= 3, 'proof with stated limits');
     assert.ok(lang.download.requirements.length >= 3 && lang.download.verifyCmd && lang.download.contribute, 'download, verify and contribute');
+    assert.ok(/pode conter|can contain/i.test(lang.sibling.intro + lang.sibling.serverText + lang.protects.siblingQuestion), 'containment stays conditional in both languages');
+    assert.ok(/não há integração|no integration/i.test(lang.sibling.limit), 'no technical integration is implied');
   }
   assert.ok(/RH/.test(pt.protects.featured.how), 'featured risk uses the HR database example');
   const visible = JSON.stringify(pt);
@@ -118,6 +127,10 @@ function load({ search = '', lang = null, reducedMotion = false, storageUnavaila
   assert.ok(pos.every((p) => p > 0) && pos.every((p, i) => i === 0 || p > pos[i - 1]), 'sections in the planned order');
   for (const id of ['como', 'protecao', 'passos', 'prova']) assert.ok(html.includes(`href="#${id}" data-sec="${id}"`), 'header link to ' + id);
   assert.ok(html.includes('id="menu"') && html.includes('aria-controls="sheet"') && html.includes('id="to-top"') && html.includes('id="progress"'), 'mobile menu, back to top, reading progress');
+  assert.ok(html.indexOf('id="projeto-irmao"') > html.indexOf('id="baixar"') && html.indexOf('id="projeto-irmao"') < html.indexOf('id="referencias"'), 'sibling section before references');
+  assert.ok(html.includes(`href="${SIBLING}"`) && /<footer[^>]*>[\s\S]*?RansomGuard[\s\S]*?<\/footer>/.test(html), 'sibling and footer links');
+  for (const key of ['sibling.eyebrow', 'sibling.title', 'sibling.network', 'sibling.server', 'sibling.limit', 'sibling.cta', 'footer.sibling']) assert.ok(html.includes(`data-i18n="${key}"`), key);
+  assert.ok(!/\?ref=|utm_/.test(html + site), 'sibling links have no tracking');
   assert.match(html, /<link rel="canonical" href="https:\/\/rodrigoimmaginario\.github\.io\/ipsec-studio\/">/, 'canonical');
   for (const p of ['og:title', 'og:description', 'og:url', 'og:type']) assert.ok(html.includes(`property="${p}"`), p);
   assert.match(html, /property="og:image" content="https:\/\/rodrigoimmaginario\.github\.io\/ipsec-studio\/img\/og\.png"/, 'og:image on Pages');
@@ -162,6 +175,9 @@ function load({ search = '', lang = null, reducedMotion = false, storageUnavaila
   ctx.SITE_VIEW.step(3);
   assert.ok(els['shot-label'].textContent.includes('Aplicar em ondas'), 'screen label follows the step');
   assert.ok(els['protect-featured'].innerHTML.includes('passe livre') && (els['protect-items'].innerHTML.match(/<li /g) || []).length === 6, 'protection');
+  assert.ok(els['protect-items'].innerHTML.includes(`href="${SIBLING}"`), 'ransomware card links to the sibling');
+  assert.match(els['protect-items'].innerHTML, /estação comprometida for autorizada/, 'authorized workstation is the bridge to RansomGuard');
+  assert.match(els['sibling-title'].textContent, /duas camadas/i, 'Portuguese sibling heading rendered');
   assert.equal((els['benefit-items'].innerHTML.match(/<li>/g) || []).length, 6, 'benefits');
   assert.equal((els['why-items'].innerHTML.match(/<li>/g) || []).length, 4, 'fears');
   assert.ok(els['why-art'].innerHTML.includes('<svg'), 'abstract image drawn');
@@ -197,6 +213,8 @@ function load({ search = '', lang = null, reducedMotion = false, storageUnavaila
   stored.els['lang-pt'].fire('click');
   assert.equal(stored.store.get('ipsec-site-lang'), 'pt');
   assert.equal(stored.els['hero-title'].textContent, 'Você sabe quem está usando a sua rede?');
+  assert.match(en.els['protect-items'].innerHTML, /compromised workstation is authorized/, 'English bridge in the ransomware card');
+  assert.match(en.els['sibling-title'].textContent, /two layers/i, 'English sibling heading rendered');
 }
 
 // The decorative hero glow must not enlarge the mobile layout viewport (real Edge: 390 became 429).

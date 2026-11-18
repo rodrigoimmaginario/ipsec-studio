@@ -205,6 +205,18 @@ svg[data-focus="enc"] .zone[data-zone="restricted"] rect, svg[data-focus="enc"] 
 .contribute { background: var(--teal-soft); border-color: #c4e5e1; }
 .contribute p { color: var(--muted); }
 
+/* sibling project: two independent defenses, with a contextual link on the ransomware card */
+.sibling { background: var(--paper); border: 1px solid var(--line); border-radius: var(--radius); margin-bottom: 72px; padding: 36px !important; }
+.sibling .lead { max-width: 64ch; }
+.sibling-layers { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 16px; margin: 26px 0 16px; }
+.sibling-layer { min-width: 0; background: var(--band); border: 1px solid var(--line); border-radius: 12px; padding: 20px; }
+.sibling-layer b, .sibling-layer span { display: block; }
+.sibling-layer span, .sibling-limit { color: var(--muted); }
+.sibling-arrow { color: var(--teal); font-size: 1.6rem; }
+.sibling .btn { margin-top: 14px; }
+.sibling-question { border-top: 1px solid var(--line); padding-top: 12px; }
+@media (max-width: 600px) { .sibling { margin: 0 18px 60px; padding: 24px !important; } .sibling-layers { grid-template-columns: 1fr; gap: 6px; } .sibling-arrow { transform: rotate(90deg); text-align: center; } }
+
 /* references and footer */
 .references { border-top: 1px solid var(--line); padding-top: 60px !important; }
 .references h2 { font-size: clamp(1.3rem, 2.4vw, 1.7rem); }
